@@ -1,76 +1,178 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
+import { useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 
-const samplePeople = [
-  { initials: "WV", name: "Weya-Ajayi Victor", title: "Founder, TYACDI Initiatives", location: "Ekiti, Nigeria", tags: ["Mentorship", "Entrepreneurship"], type: "Founder", color: "lav" },
-  { initials: "DK", name: "David Kimani", title: "CEO, Meridian Group", location: "Nairobi, Kenya", tags: ["Leadership", "Scale-up"], type: "CEO", color: "gold" },
-  { initials: "SO", name: "Sofia Okafor", title: "Product builder & operator", location: "Accra, Ghana", tags: ["Product", "Growth"], type: "Builder", color: "blue" },
-];
+export default function Signup() {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [role, setRole] = useState("Founder");
+  const [company, setCompany] = useState("");
+  const [bio, setBio] = useState("");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
 
-export default async function Home() {
-  let user = null;
-  try {
-    const supabase = createClient();
-    const { data } = await supabase.auth.getUser();
-    user = data.user;
-  } catch {
-    // Keep the public homepage available if auth cannot be checked.
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const supabase = createClient();
+      const { data, error: signupError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { full_name: name, role, company, bio } },
+      });
+
+      if (signupError) throw signupError;
+
+      if (data.session) {
+        window.location.href = "/dashboard";
+      } else {
+        setNotice("Account created. Check your email to confirm your address, then log in.");
+      }
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not create your account. Please check your details and try again."
+      );
+    } finally {
+      setBusy(false);
+    }
   }
-  if (user) redirect("/dashboard");
 
   return (
-    <main>
-      <nav className="nav wrap">
+    <div className="auth-page">
+      <aside className="auth-side">
         <Link className="brand" href="/" aria-label="TYACDI BRIDGE home">
-          <Image src="/tyacdi-logo.png" alt="TYACDI BRIDGE — Learn, Build, Grow" width={180} height={90} priority style={{ width: "150px", height: "auto", objectFit: "contain" }} />
+          <Image
+            src="/tyacdi-logo.png"
+            alt="TYACDI BRIDGE — Learn, Build, Grow"
+            width={180}
+            height={90}
+            priority
+            style={{ width: "150px", height: "auto", objectFit: "contain" }}
+          />
         </Link>
-        <div className="nav-links"><a href="#how">How it works</a><a href="#network">The network</a></div>
-        <div className="nav-actions"><Link className="login-link" href="/login">Log in</Link><Link className="btn btn-dark btn-small" href="/signup">Join the network <span></span></Link></div>
-      </nav>
 
-      <section className="hero wrap">
-        <div className="hero-copy">
-          <div className="eyebrow"><span className="eyebrow-dot" /> THE NEXT CHAPTER STARTS WITH A CONNECTION</div>
-          <h1>Ambition deserves<br />a <em>better network.</em></h1>
-          <p className="hero-lede">A professional community where ambitious builders meet experienced CEOs, mentors, operators, and people who have been there before.</p>
-          <div className="hero-actions"><Link className="btn btn-dark" href="/signup">Find your people <span></span></Link><Link className="text-link" href="#how">See how it works <span>↓</span></Link></div>
-          <div className="social-proof"><div className="avatar-stack"><span className="av av1">AM</span><span className="av av2">DK</span><span className="av av3">SO</span><span className="av av4">+</span></div><div><strong>Built for people who build.</strong><small>Founders · CEOs · Operators · Rising talent</small></div></div>
+        <div className="auth-side-copy">
+          <div className="eyebrow">YOUR NEXT CHAPTER STARTS HERE</div>
+          <h1>
+            Make room for
+            <br />
+            the <em>right people.</em>
+          </h1>
+          <p>
+            Meet ambitious builders and experienced leaders. Share what you
+            know, learn what you need, and make introductions matter.
+          </p>
         </div>
-        <div className="hero-art" aria-label="Illustration of professionals connecting">
-          <div className="art-glow" /><div className="orbit orbit-one" /><div className="orbit orbit-two" /><div className="network-line line-a" /><div className="network-line line-b" /><div className="network-line line-c" />
-          <div className="profile-card card-main"><div className="profile-top"><span className="status-dot" /> OPEN TO CONNECTIONS <span className="more">···</span></div><div className="person-row"><div className="portrait portrait-main">JM</div><div><strong>Jordan Mensah</strong><small>CEO · Atlas Ventures</small><small className="verified">✓ Verified professional</small></div></div><div className="quote">“The right conversation can change the direction of a business.”</div><div className="chip-row"><span>Strategy</span><span>Mentorship</span></div></div>
-          <div className="profile-card card-float"><div className="portrait portrait-small">TK</div><div><strong>Tomi K.</strong><small>Founder · Early stage</small><span className="match">Shared interests · 3</span></div><span className="connect-icon"></span></div>
-          <div className="floating-note"><span className="note-icon">✳</span><div><strong>Better introductions.</strong><small>More meaningful progress.</small></div></div>
-          <div className="art-label label-one">EXPERIENCE</div><div className="art-label label-two">POTENTIAL</div>
+
+        <div className="auth-side-foot">
+          Learn. Build. Grow. A thoughtful network for people moving things forward.
         </div>
-      </section>
+      </aside>
 
-      <section className="trust-bar"><div className="wrap trust-inner"><span>ONE NETWORK, MANY PERSPECTIVES</span><div><b>01</b> Founders</div><div><b>02</b> CEOs &amp; executives</div><div><b>03</b> Operators</div><div><b>04</b> Rising talent</div></div></section>
+      <main className="auth-main">
+        <form className="auth-form" onSubmit={submit}>
+          <h2>Join TYACDI BRIDGE</h2>
+          <p className="auth-intro">
+            Create your member account. Every member signs in to access the network.
+          </p>
 
-      <section className="section wrap" id="how">
-        <div className="section-heading"><div><div className="eyebrow">A NETWORK WITH INTENTION</div><h2>Not another feed.<br /><em>A starting point.</em></h2></div><p>Skip the noise. Find people whose experience, goals, and perspective can help you take the next step.</p></div>
-        <div className="value-grid">
-          <article className="value-card"><div className="value-num">01 / DISCOVER</div><div className="value-icon">⌕</div><h3>Find your next connection</h3><p>Explore a directory of founders, leaders, and professionals by role, industry, and what they can share.</p><Link href="/signup">Explore the network </Link></article>
-          <article className="value-card value-featured"><div className="value-num">02 / CONNECT</div><div className="value-icon"></div><h3>Make introductions count</h3><p>Send thoughtful connection requests and explain what brings you together. No cold-message chaos.</p><Link href="/signup">Start a conversation </Link></article>
-          <article className="value-card"><div className="value-num">03 / GROW</div><div className="value-icon">⌁</div><h3>Turn insight into momentum</h3><p>Build relationships around mentorship, collaboration, advice, and opportunities that move your work forward.</p><Link href="/signup">Build your circle </Link></article>
-        </div>
-      </section>
+          {error && <div className="auth-error" role="alert">{error}</div>}
+          {notice && (
+            <div className="auth-message" role="status">
+              {notice} <Link href="/login">Log in</Link>
+            </div>
+          )}
 
-      <section className="people-section" id="network"><div className="wrap">
-        <div className="people-head"><div><div className="eyebrow">A FEW OF THE PEOPLE YOU COULD MEET</div><h2>Different journeys.<br /><em>Shared ambition.</em></h2></div><Link className="btn btn-light" href="/signup">Meet the network </Link></div>
-        <div className="people-grid">{samplePeople.map((p) => <article className="person-card" key={p.name}><div className="person-card-top"><span className={`portrait ${p.color}`}>{p.initials}</span><span className="person-type">{p.type}</span></div><h3>{p.name}</h3><p className="person-title">{p.title}</p><p className="person-location">⌖ {p.location}</p><div className="person-tags">{p.tags.map((tag) => <span key={tag}>{tag}</span>)}</div><Link href="/signup" className="person-cta">View profile <span></span></Link></article>)}</div>
-        <p className="demo-note">Illustrative profiles shown for preview. Real member profiles require an account.</p>
-      </div></section>
+          <label htmlFor="name">Full name</label>
+          <input
+            id="name"
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Your full name"
+            autoComplete="name"
+          />
 
-      <section className="cta-section wrap"><div className="cta-box"><div className="cta-decoration">b.</div><div className="eyebrow">YOUR NEXT INTRODUCTION STARTS HERE</div><h2>Your ambition is personal.<br /><em>Your network can be powerful.</em></h2><p>Join a community built around real people, shared knowledge, and meaningful progress.</p><Link href="/signup" className="btn btn-light">Create your account <span></span></Link><small>Growth is gradual — but with us, exponential.</small></div></section>
+          <label htmlFor="email">Work or professional email</label>
+          <input
+            id="email"
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@company.com"
+            autoComplete="email"
+          />
 
-      <footer className="footer wrap">
-        <Link className="brand" href="/" aria-label="TYACDI BRIDGE home"><Image src="/tyacdi-logo.png" alt="TYACDI BRIDGE — Learn, Build, Grow" width={180} height={90} style={{ width: "125px", height: "auto", objectFit: "contain" }} /></Link>
-        <span>Ambition meets experience.</span><div><Link href="/login">Log in</Link><Link href="/signup">Join</Link></div>
-        <small>© {new Date().getFullYear()} TYACDI BRIDGE</small><p className="footer-motto">Tosi says: You also can do it.</p>
-      </footer>
-    </main>
+          <div className="form-row">
+            <div>
+              <label htmlFor="role">Your current role</label>
+              <select id="role" value={role} onChange={(e) => setRole(e.target.value)}>
+                <option>Founder</option>
+                <option>Mentor</option>
+                <option>CEO / Executive</option>
+                <option>Operator</option>
+                <option>Professional</option>
+                <option>Student / Emerging talent</option>
+                <option>Investor</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="company">Company / project</label>
+              <input
+                id="company"
+                value={company}
+                onChange={(e) => setCompany(e.target.value)}
+                placeholder="Optional"
+              />
+            </div>
+          </div>
+
+          <label htmlFor="bio">What are you working toward? (optional)</label>
+          <textarea
+            id="bio"
+            rows={3}
+            value={bio}
+            onChange={(e) => setBio(e.target.value)}
+            placeholder="A short introduction or goal..."
+          />
+
+          <label htmlFor="password">Create password</label>
+          <input
+            id="password"
+            type="password"
+            minLength={8}
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="At least 8 characters"
+            autoComplete="new-password"
+          />
+
+          <button className="btn btn-dark" type="submit" disabled={busy}>
+            {busy ? "Creating account..." : "Create my account"}
+          </button>
+
+          <p className="auth-switch">
+            Already a member? <Link href="/login">Log in</Link>
+          </p>
+          <p className="form-note">
+            By joining, you agree to treat members respectfully and protect
+            private information shared through the network.
+          </p>
+        </form>
+      </main>
+    </div>
   );
 }
