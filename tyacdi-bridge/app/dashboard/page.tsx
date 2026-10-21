@@ -253,26 +253,48 @@ export default function Dashboard() {
             />
           </Link>
           <div className="nav-actions">
-            <span style={{ fontSize: 12, color: "#6c7b70" }}>
-              {profile?.full_name || "Member"}
-            </span>
-            <button className="logout-btn" type="button" onClick={logout}>
-              Log out
-            </button>
+  <span style={{ fontSize: 12, color: "#6c7b70" }}>
+    {profile?.full_name || "Member"}
+  </span>
+
+  <Link
+    href="/messages"
+    className="btn btn-dark"
+    style={{ textDecoration: "none" }}
+  >
+    Messages
+  </Link>
+
+  <button className="logout-btn" type="button" onClick={logout}>
+    Log out
+  </button>
+</div>
           </div>
         </nav>
       </header>
 
       <div className="wrap dash-content">
         <section className="dash-title">
-          <div>
-            <div className="eyebrow">MEMBER WORKSPACE</div>
-            <h1>Good to see you, {(profile?.full_name || "there").split(" ")[0]}.</h1>
-            <p>Your network grows when you show up with intention.</p>
-          </div>
-          <a className="btn btn-dark" href="#directory">Discover members</a>
-        </section>
+  <div>
+    <div className="eyebrow">MEMBER WORKSPACE</div>
 
+    <h1>
+      Good to see you, {(profile?.full_name || "there").split(" ")[0]}.
+    </h1>
+
+    <p>Your network grows when you show up with intention.</p>
+  </div>
+
+  <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+    <Link className="btn btn-dark" href="/messages">
+      Open messages
+    </Link>
+
+    <a className="btn btn-dark" href="#directory">
+      Discover members
+    </a>
+  </div>
+</section>
         {message && <div className="flash" role="status">{message}</div>}
 
         <div className="dash-grid">
