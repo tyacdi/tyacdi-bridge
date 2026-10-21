@@ -1,13 +1,21 @@
 @import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
 
+/* ========================================
+   TYACDI BRIDGE — GLOBAL THEME
+======================================== */
+
 :root {
   --ink: #182b28;
   --muted: #697672;
   --paper: #f8f8f4;
   --green: #bce8cb;
   --line: #e5e7df;
-  --white: #fff;
+  --white: #ffffff;
+  --dark-green: #1b332b;
+  --accent-green: #4c8867;
+  --soft-green: #e8f0e6;
+  --gold: #d6c18a;
 }
 
 * {
@@ -31,18 +39,33 @@ a {
   text-decoration: none;
 }
 
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+img {
+  max-width: 100%;
+}
+
+/* ========================================
+   CONTAINERS
+======================================== */
+
 .wrap {
   width: min(1180px, calc(100% - 64px));
   margin-inline: auto;
 }
 
-.nav {
-  height: 88px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid #e8e9e2;
-}
+/* ========================================
+   BRANDING
+======================================== */
 
 .brand {
   display: flex;
@@ -51,10 +74,454 @@ a {
   font-family: Manrope, sans-serif;
   font-weight: 800;
   font-size: 19px;
-  letter-spacing: -.8px;
+  letter-spacing: -0.8px;
 }
 
 .brand-mark {
   display: grid;
   place-items: center;
-  width: 33px
+  width: 33px;
+  height: 33px;
+  border-radius: 10px;
+  background: var(--ink);
+  color: #c8f0d4;
+  font-size: 21px;
+  flex-shrink: 0;
+}
+
+/* ========================================
+   NAVIGATION
+======================================== */
+
+.nav {
+  min-height: 88px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid #e8e9e2;
+}
+
+.nav-links {
+  display: flex;
+  gap: 34px;
+  font-size: 13px;
+  color: #65716c;
+}
+
+.nav-links a:hover,
+.login-link:hover {
+  color: #0d6a45;
+}
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ========================================
+   BUTTONS
+======================================== */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 14px 19px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  transition:
+    transform 0.2s ease,
+    background 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+}
+
+.btn-dark {
+  background: var(--ink);
+  color: white;
+}
+
+.btn-dark:hover {
+  background: #25443c;
+}
+
+.btn-small {
+  padding: 11px 14px;
+  font-size: 12px;
+}
+
+.btn-light {
+  background: #d0f0d8;
+  color: #18372b;
+}
+
+.btn-light:hover {
+  background: #e0f6e5;
+}
+
+/* ========================================
+   HERO SECTION
+======================================== */
+
+.hero {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  min-height: 595px;
+  padding-top: 42px;
+  padding-bottom: 54px;
+  gap: 50px;
+}
+
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #6d7b73;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.7px;
+}
+
+.eyebrow-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3f9a6a;
+  box-shadow: 0 0 0 4px #3f9a6a18;
+}
+
+.hero h1,
+.section-heading h2,
+.people-head h2,
+.cta-box h2 {
+  margin: 25px 0 20px;
+  font-family: Manrope, sans-serif;
+  font-size: clamp(45px, 5.5vw, 70px);
+  font-weight: 600;
+  line-height: 1.06;
+  letter-spacing: -3.6px;
+}
+
+.hero h1 em,
+.section h2 em,
+.people-head h2 em,
+.cta-box h2 em {
+  color: var(--accent-green);
+  font-style: normal;
+}
+
+.hero-lede {
+  max-width: 475px;
+  margin: 0;
+  color: #65716c;
+  font-size: 16px;
+  line-height: 1.85;
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 27px;
+  margin-top: 29px;
+}
+
+.text-link {
+  color: #3c5148;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.text-link span {
+  padding-left: 7px;
+}
+
+/* ========================================
+   SOCIAL PROOF
+======================================== */
+
+.social-proof {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 44px;
+}
+
+.avatar-stack {
+  display: flex;
+  padding-left: 2px;
+}
+
+.av {
+  display: grid;
+  place-items: center;
+  width: 31px;
+  height: 31px;
+  margin-left: -4px;
+  border: 2px solid var(--paper);
+  border-radius: 50%;
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.av1 {
+  background: #e8c5a6;
+}
+
+.av2 {
+  background: #b3d2c2;
+}
+
+.av3 {
+  background: #c7b7df;
+}
+
+.av4 {
+  background: #243c33;
+  color: white;
+}
+
+.social-proof strong,
+.social-proof small {
+  display: block;
+}
+
+.social-proof strong {
+  font-size: 11px;
+}
+
+.social-proof small {
+  margin-top: 3px;
+  color: #77817c;
+  font-size: 10px;
+}
+
+/* ========================================
+   HERO VISUAL
+======================================== */
+
+.hero-art {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 460px;
+  overflow: hidden;
+  border-radius: 4px;
+  background:
+    radial-gradient(ellipse at 50% 50%, #d4e7d4 0, transparent 55%),
+    linear-gradient(140deg, #f0f2eb, #dfe8dd);
+}
+
+.art-glow {
+  position: absolute;
+  width: 270px;
+  height: 270px;
+  border-radius: 50%;
+  background: #c8e5ce;
+  filter: blur(2px);
+}
+
+.orbit {
+  position: absolute;
+  border: 1px solid #8aa99570;
+  border-radius: 50%;
+  transform: rotate(-26deg);
+}
+
+.orbit-one {
+  width: 470px;
+  height: 230px;
+}
+
+.orbit-two {
+  width: 350px;
+  height: 360px;
+  transform: rotate(43deg);
+}
+
+.network-line {
+  position: absolute;
+  height: 1px;
+  background: #6c9d7c70;
+  transform-origin: left;
+}
+
+.line-a {
+  left: 14%;
+  top: 24%;
+  width: 340px;
+  transform: rotate(33deg);
+}
+
+.line-b {
+  left: 42%;
+  top: 31%;
+  width: 350px;
+  transform: rotate(122deg);
+}
+
+.line-c {
+  left: 20%;
+  top: 76%;
+  width: 280px;
+  transform: rotate(-42deg);
+}
+
+/* ========================================
+   PROFILE CARDS
+======================================== */
+
+.profile-card {
+  position: absolute;
+  border: 1px solid #e2e7df;
+  border-radius: 11px;
+  background: white;
+  box-shadow: 0 24px 55px #294a361a;
+}
+
+.card-main {
+  z-index: 2;
+  top: 50%;
+  left: 50%;
+  width: 275px;
+  padding: 17px;
+  transform: translate(-50%, -50%);
+}
+
+.profile-top {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #738179;
+  font-size: 8px;
+  letter-spacing: 1px;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4baf76;
+}
+
+.more {
+  margin-left: auto;
+  font-size: 18px;
+}
+
+.person-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 23px 0 16px;
+}
+
+.portrait {
+  display: grid;
+  place-items: center;
+  width: 49px;
+  height: 49px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #d9e8d9;
+  color: #315740;
+  font-family: Manrope, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.portrait-main {
+  background: linear-gradient(140deg, #d4b6a0, #e6d9c7);
+  color: #4a3b31;
+}
+
+.person-row strong,
+.person-row small {
+  display: block;
+}
+
+.person-row strong {
+  font-size: 13px;
+}
+
+.person-row small {
+  margin-top: 4px;
+  color: #78827b;
+  font-size: 10px;
+}
+
+.person-row .verified {
+  color: #35865b;
+  font-size: 9px;
+}
+
+.quote {
+  padding: 13px 0;
+  border-top: 1px solid #edf0e9;
+  color: #53635a;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip-row span,
+.person-tags span {
+  padding: 6px 9px;
+  border-radius: 4px;
+  background: #eff5ef;
+  color: #54725d;
+  font-size: 9px;
+}
+
+.card-float {
+  z-index: 3;
+  right: 3%;
+  bottom: 13%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+}
+
+.portrait-small {
+  width: 38px;
+  height: 38px;
+  background: #c7d8e6;
+  color: #35576e;
+}
+
+.card-float strong,
+.card-float small,
+.card-float .match {
+  display: block;
+}
+
+.card-float strong {
+  font-size: 11px;
+}
+
+.card-float small {
+  margin-top: 3px;
+  color: #77817c;
+  font-size: 9px;
+}
+
+.card-float .match {
+  margin-top: 5px;
+  color: #3b9863;
