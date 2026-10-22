@@ -82,10 +82,6 @@ export const metadata: Metadata = {
   verification: {
     google: "XNQiPB0hUk3TvSoLobOezsbCZ80dvB1XsiBqj8b8Y0U",
   },
-
-  other: {
-    "application-name": "TYACDI BRIDGE",
-  },
 };
 
 export const viewport: Viewport = {
@@ -99,9 +95,36 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const websiteStructuredData = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "TYACDI BRIDGE",
+    alternateName: "TYACDI",
+    url: `${siteUrl}/`,
+    description:
+      "A professional networking and mentorship platform connecting ambitious young entrepreneurs with experienced CEOs and mentors.",
+    publisher: {
+      "@type": "Organization",
+      name: "TYACDI BRIDGE",
+      founder: {
+        "@type": "Person",
+        name: "WEYA-AJAYI VICTOR",
+      },
+    },
+  };
+
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(websiteStructuredData),
+          }}
+        />
+
+        {children}
+      </body>
     </html>
   );
 }
