@@ -37,8 +37,18 @@ export const metadata: Metadata = {
 
   creator: "WEYA-AJAYI VICTOR",
 
+  publisher: "TYACDI BRIDGE",
+
+  category: "business",
+
   alternates: {
     canonical: "/",
+  },
+
+  icons: {
+    icon: "/icon.png",
+    shortcut: "/icon.png",
+    apple: "/apple-icon.png",
   },
 
   openGraph: {
@@ -90,14 +100,30 @@ export const viewport: Viewport = {
   themeColor: "#ffffff",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
-  return (
-    <html lang="en">
-      <body>{children}</body>
-    </html>
-  );
-}
+const structuredData = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": `${siteUrl}/#website`,
+      url: `${siteUrl}/`,
+      name: "TYACDI BRIDGE",
+      alternateName: [
+        "TYACDI Bridge",
+        "TYACDI BRIDGE — Learn. Build. Grow.",
+      ],
+      description:
+        "A professional networking and mentorship platform connecting ambitious young entrepreneurs with experienced CEOs and mentors.",
+      inLanguage: "en",
+      publisher: {
+        "@id": `${siteUrl}/#organization`,
+      },
+    },
+    {
+      "@type": "Organization",
+      "@id": `${siteUrl}/#organization`,
+      name: "TYACDI BRIDGE",
+      url: `${siteUrl}/`,
+      logo: {
+        "@type": "ImageObject",
+        url: `${site
