@@ -1,18 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 type CEOProfile = {
   id: string;
-  full_name: string;
+  full_name: string | null;
   role: string | null;
   company: string | null;
   industry: string | null;
   location: string | null;
   bio: string | null;
 };
+
+const inputStyles =
+  "w-full rounded-xl border border-[#dce5dc] bg-[#fbfcf9] px-4 py-3.5 text-sm text-[#182b28] outline-none transition placeholder:text-[#929e95] focus:border-[#4c8867] focus:bg-white focus:ring-4 focus:ring-[#4c8867]/10";
 
 export default function FindCEOsPage() {
   const [profiles, setProfiles] = useState<CEOProfile[]>([]);
@@ -25,7 +28,7 @@ export default function FindCEOsPage() {
     null
   );
 
-  async function loadCEOs() {
+  const loadCEOs = useCallback(async () => {
     setLoading(true);
     setError("");
 
@@ -37,7 +40,11 @@ export default function FindCEOsPage() {
         error: authError,
       } = await supabase.auth.getUser();
 
-      if (authError || !user) {
+      if (authError) {
+        throw authError;
+      }
+
+      if (!user) {
         window.location.href = "/login";
         return;
       }
@@ -53,27 +60,26 @@ export default function FindCEOsPage() {
         .order("full_name", { ascending: true });
 
       if (queryError) {
-        console.error("Error loading CEO profiles:", queryError);
-        setError(
-          `Unable to load CEO profiles: ${queryError.message}`
-        );
-        return;
+        throw queryError;
       }
 
       setProfiles((data ?? []) as CEOProfile[]);
-    } catch (err) {
-      console.error("Unexpected error loading CEO profiles:", err);
+    } catch (err: unknown) {
+      console.error("Unable to load CEO profiles:", err);
+
       setError(
-        "Something went wrong while loading CEO profiles. Please try again."
+        err instanceof Error
+          ? err.message
+          : "Unable to load CEO profiles. Please try again."
       );
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     void loadCEOs();
-  }, []);
+  }, [loadCEOs]);
 
   const industries = useMemo(() => {
     const values = profiles
@@ -91,18 +97,24 @@ export default function FindCEOsPage() {
     const place = location.trim().toLowerCase();
 
     return profiles.filter((profile) => {
+      const name = (profile.full_name ?? "").toLowerCase();
+      const company = (profile.company ?? "").toLowerCase();
+      const profileIndustry = (profile.industry ?? "").toLowerCase();
+      const profileLocation = (profile.location ?? "").toLowerCase();
+
       const matchesSearch =
         !term ||
-        (profile.full_name ?? "").toLowerCase().includes(term) ||
-        (profile.company ?? "").toLowerCase().includes(term);
+        name.includes(term) ||
+        company.includes(term) ||
+        profileIndustry.includes(term) ||
+        profileLocation.includes(term);
 
       const matchesIndustry =
         industry === "All industries" ||
         profile.industry === industry;
 
       const matchesLocation =
-        !place ||
-        (profile.location ?? "").toLowerCase().includes(place);
+        !place || profileLocation.includes(place);
 
       return (
         matchesSearch &&
@@ -111,9 +123,6 @@ export default function FindCEOsPage() {
       );
     });
   }, [profiles, search, industry, location]);
-
-  const inputStyles =
-    "w-full rounded-xl border border-[#dce5dc] bg-[#fbfcf9] px-4 py-3.5 text-sm text-[#182b28] outline-none transition placeholder:text-[#929e95] focus:border-[#4c8867] focus:bg-white focus:ring-4 focus:ring-[#4c8867]/10";
 
   function clearFilters() {
     setSearch("");
@@ -125,31 +134,34 @@ export default function FindCEOsPage() {
     <main className="min-h-screen overflow-hidden bg-[#f8f8f4] text-[#182b28]">
       {/* Navigation */}
       <header className="sticky top-0 z-30 border-b border-[#e5e7df] bg-[#f8f8f4]/95 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-4 sm:px-8">
           <Link
             href="/dashboard"
-            className="flex shrink-0 items-center gap-3"
             aria-label="TYACDI BRIDGE dashboard"
+            className="flex min-w-0 items-center gap-3"
           >
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#182b28] text-xl font-black text-[#c8f0d4] shadow-lg shadow-[#182b28]/10">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#182b28] text-lg font-black text-[#c8f0d4] shadow-lg shadow-[#182b28]/10">
               T
-            </div>
+            </span>
 
-            <div>
-              <p className="text-base font-extrabold tracking-tight sm:text-lg">
-                TYACDI{" "}
-                <span className="text-[#4c8867]">BRIDGE</span>
-              </p>
-              <p className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.2em] text-[#7b877e] sm:text-[10px]">
+            <span className="min-w-0">
+              <span className="block text-sm font-extrabold tracking-tight sm:text-lg">
+                TYACDI <span className="text-[#4c8867]">BRIDGE</span>
+              </span>
+
+              <span className="mt-0.5 block text-[9px] font-bold uppercase tracking-[0.15em] text-[#7b877e] sm:text-[10px] sm:tracking-[0.2em]">
                 Learn · Build · Grow
-              </p>
-            </div>
+              </span>
+            </span>
           </Link>
 
-          <nav className="flex items-center gap-1 sm:gap-3">
+          <nav
+            aria-label="Main navigation"
+            className="flex shrink-0 items-center gap-1 sm:gap-3"
+          >
             <Link
               href="/dashboard"
-              className="rounded-lg px-2.5 py-2 text-xs font-semibold text-[#697672] transition hover:bg-[#eaf0e8] hover:text-[#182b28] sm:px-4 sm:text-sm"
+              className="rounded-lg px-2 py-2 text-xs font-semibold text-[#697672] transition hover:bg-[#eaf0e8] hover:text-[#182b28] sm:px-4 sm:text-sm"
             >
               Dashboard
             </Link>
@@ -170,9 +182,9 @@ export default function FindCEOsPage() {
 
         <div className="pointer-events-none absolute -bottom-32 left-1/4 -z-10 h-80 w-80 rounded-full bg-[#e4eee0]/70 blur-3xl" />
 
-        <div className="mx-auto grid max-w-7xl items-center gap-12 px-5 py-14 sm:px-8 sm:py-20 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16 lg:py-24">
+        <div className="mx-auto grid max-w-7xl items-center gap-10 px-4 py-12 sm:px-8 sm:py-20 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16 lg:py-24">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#dce7da] bg-white/80 px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[#526f5b] sm:text-xs">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#dce7da] bg-white/80 px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[#526f5b] sm:text-xs sm:tracking-[0.16em]">
               <span className="h-2 w-2 rounded-full bg-[#4c8867]" />
               The TYACDI professional network
             </div>
@@ -209,23 +221,21 @@ export default function FindCEOsPage() {
             </div>
 
             <div className="mt-10 flex flex-wrap gap-x-7 gap-y-3 border-t border-[#e5e7df] pt-6">
-              {[
-                "Leadership",
-                "Mentorship",
-                "Business growth",
-              ].map((item) => (
-                <div
-                  key={item}
-                  className="flex items-center gap-2 text-xs font-semibold text-[#697672]"
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#78a884]" />
-                  {item}
-                </div>
-              ))}
+              {["Leadership", "Mentorship", "Business growth"].map(
+                (item) => (
+                  <div
+                    key={item}
+                    className="flex items-center gap-2 text-xs font-semibold text-[#697672]"
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#78a884]" />
+                    {item}
+                  </div>
+                )
+              )}
             </div>
           </div>
 
-          {/* Decorative network illustration */}
+          {/* Network illustration */}
           <div className="relative mx-auto flex min-h-[330px] w-full max-w-lg items-center justify-center sm:min-h-[410px]">
             <div className="absolute h-64 w-64 rounded-full border border-[#b7d1b9]/70 sm:h-80 sm:w-80" />
 
@@ -235,24 +245,27 @@ export default function FindCEOsPage() {
 
             <div className="absolute h-48 w-48 rounded-full bg-[#d9ebd8]/70 blur-2xl sm:h-64 sm:w-64" />
 
-            <div className="absolute left-[7%] top-[17%] rounded-xl border border-[#e1e8df] bg-white/95 p-3 shadow-lg shadow-[#243f30]/5 sm:left-[5%]">
+            <div className="absolute left-[2%] top-[12%] rounded-xl border border-[#e1e8df] bg-white/95 p-3 shadow-lg shadow-[#243f30]/5 sm:left-[5%] sm:top-[17%]">
               <p className="text-[9px] font-bold uppercase tracking-[0.13em] text-[#849184]">
                 Your network
               </p>
+
               <p className="mt-1.5 text-xs font-bold text-[#203c2a]">
                 New opportunities
               </p>
             </div>
 
-            <div className="absolute right-[4%] top-[23%] rounded-xl border border-[#e1e8df] bg-white/95 p-3 shadow-lg shadow-[#243f30]/5 sm:right-[1%]">
+            <div className="absolute right-[1%] top-[20%] rounded-xl border border-[#e1e8df] bg-white/95 p-3 shadow-lg shadow-[#243f30]/5 sm:right-[1%] sm:top-[23%]">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#d8e9d7] text-xs font-black text-[#31583d]">
                   CEO
                 </div>
+
                 <div>
                   <p className="text-xs font-bold text-[#203c2a]">
                     Leadership
                   </p>
+
                   <p className="mt-1 text-[10px] text-[#849184]">
                     Experience that matters
                   </p>
@@ -266,10 +279,12 @@ export default function FindCEOsPage() {
                   <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#849184]">
                     The right connection
                   </p>
+
                   <p className="mt-1 text-sm font-extrabold text-[#182b28]">
                     Built on experience
                   </p>
                 </div>
+
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#eaf4e9] text-[#4c8867]">
                   ↗
                 </span>
@@ -279,10 +294,12 @@ export default function FindCEOsPage() {
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#dcebd9] to-[#b8d8bf] text-lg font-black text-[#31583d]">
                   TB
                 </div>
+
                 <div>
                   <p className="text-sm font-extrabold text-[#182b28]">
                     TYACDI BRIDGE
                   </p>
+
                   <p className="mt-1 text-xs text-[#697672]">
                     Ambition meets experience.
                   </p>
@@ -304,10 +321,11 @@ export default function FindCEOsPage() {
               </div>
             </div>
 
-            <div className="absolute bottom-[12%] left-[3%] rounded-xl border border-[#e1e8df] bg-white/95 px-4 py-3 shadow-lg shadow-[#243f30]/5 sm:bottom-[9%]">
+            <div className="absolute bottom-[8%] left-[2%] rounded-xl border border-[#e1e8df] bg-white/95 px-3 py-3 shadow-lg shadow-[#243f30]/5 sm:bottom-[9%] sm:left-[3%] sm:px-4">
               <p className="text-[9px] font-bold uppercase tracking-[0.13em] text-[#849184]">
                 The mission
               </p>
+
               <p className="mt-1 text-xs font-extrabold text-[#31583d]">
                 Growth through connection
               </p>
@@ -317,7 +335,7 @@ export default function FindCEOsPage() {
 
         {/* Three steps */}
         <div className="border-t border-[#e5e7df] bg-[#f2f3ed]">
-          <div className="mx-auto grid max-w-7xl gap-0 px-5 sm:grid-cols-3 sm:px-8">
+          <div className="mx-auto grid max-w-7xl gap-0 px-4 sm:grid-cols-3 sm:px-8">
             {[
               {
                 number: "01",
@@ -338,16 +356,20 @@ export default function FindCEOsPage() {
               <div
                 key={step.number}
                 className={`flex items-start gap-4 py-5 sm:px-5 sm:py-7 ${
-                  index > 0 ? "sm:border-l sm:border-[#dfe5da]" : ""
+                  index > 0
+                    ? "sm:border-l sm:border-[#dfe5da]"
+                    : ""
                 }`}
               >
                 <span className="pt-0.5 text-xs font-extrabold tracking-wider text-[#4c8867]">
                   {step.number}
                 </span>
+
                 <div>
                   <p className="text-sm font-extrabold text-[#203c2a]">
                     {step.title}
                   </p>
+
                   <p className="mt-1 text-xs leading-5 text-[#758176]">
                     {step.description}
                   </p>
@@ -361,7 +383,7 @@ export default function FindCEOsPage() {
       {/* Search and CEO directory */}
       <section
         id="ceo-directory"
-        className="mx-auto max-w-7xl px-5 py-14 sm:px-8 sm:py-20"
+        className="mx-auto max-w-7xl px-4 py-14 sm:px-8 sm:py-20"
       >
         <div className="mb-9 grid gap-5 md:grid-cols-[1fr_0.7fr] md:items-end">
           <div>
@@ -372,9 +394,7 @@ export default function FindCEOsPage() {
             <h2 className="mt-3 text-3xl font-semibold tracking-[-0.05em] sm:text-4xl md:text-5xl">
               Find your next
               <br className="hidden sm:block" />{" "}
-              <span className="text-[#4c8867]">
-                connection.
-              </span>
+              <span className="text-[#4c8867]">connection.</span>
             </h2>
           </div>
 
@@ -388,7 +408,7 @@ export default function FindCEOsPage() {
         {/* Search card */}
         <div className="rounded-2xl border border-[#e3e7de] bg-white p-5 shadow-[0_12px_45px_rgba(24,43,40,0.045)] sm:rounded-3xl sm:p-8">
           <div className="mb-6 flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#eaf3e8] text-[#31583d]">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#eaf3e8] text-[#31583d]">
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
@@ -406,6 +426,7 @@ export default function FindCEOsPage() {
               <h3 className="text-base font-extrabold text-[#203c2a]">
                 Search business leaders
               </h3>
+
               <p className="mt-1 text-xs text-[#849184]">
                 Refine your search to find the right people
               </p>
@@ -417,6 +438,7 @@ export default function FindCEOsPage() {
               <span className="mb-2 block text-xs font-bold text-[#354a39]">
                 Name or company
               </span>
+
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
@@ -429,6 +451,7 @@ export default function FindCEOsPage() {
               <span className="mb-2 block text-xs font-bold text-[#354a39]">
                 Industry
               </span>
+
               <select
                 value={industry}
                 onChange={(event) => setIndustry(event.target.value)}
@@ -446,6 +469,7 @@ export default function FindCEOsPage() {
               <span className="mb-2 block text-xs font-bold text-[#354a39]">
                 Location
               </span>
+
               <input
                 value={location}
                 onChange={(event) => setLocation(event.target.value)}
@@ -463,9 +487,7 @@ export default function FindCEOsPage() {
               {loading
                 ? "Finding business leaders..."
                 : `${filteredCEOs.length} ${
-                    filteredCEOs.length === 1
-                      ? "leader"
-                      : "leaders"
+                    filteredCEOs.length === 1 ? "leader" : "leaders"
                   } found`}
             </p>
 
@@ -485,6 +507,7 @@ export default function FindCEOsPage() {
             <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-[#4c8867] sm:text-xs">
               The TYACDI network
             </p>
+
             <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] sm:text-3xl">
               CEO directory
             </h2>
@@ -575,7 +598,8 @@ export default function FindCEOsPage() {
             {filteredCEOs.map((ceo) => {
               const initials =
                 (ceo.full_name ?? "")
-                  .split(" ")
+                  .trim()
+                  .split(/\s+/)
                   .filter(Boolean)
                   .slice(0, 2)
                   .map((part) => part[0]?.toUpperCase())
@@ -667,8 +691,7 @@ export default function FindCEOsPage() {
               </span>
 
               <span className="text-sm font-extrabold tracking-tight text-[#182b28]">
-                TYACDI{" "}
-                <span className="text-[#4c8867]">BRIDGE</span>
+                TYACDI <span className="text-[#4c8867]">BRIDGE</span>
               </span>
             </Link>
 
