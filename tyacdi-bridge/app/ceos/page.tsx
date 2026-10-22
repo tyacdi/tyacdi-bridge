@@ -1,21 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 type CEOProfile = {
   id: string;
-  full_name: string | null;
+  full_name: string;
   role: string | null;
   company: string | null;
   industry: string | null;
   location: string | null;
   bio: string | null;
 };
-
-const inputStyles =
-  "w-full rounded-xl border border-[#dce5dc] bg-[#fbfcf9] px-4 py-3.5 text-sm text-[#182b28] outline-none transition placeholder:text-[#929e95] focus:border-[#4c8867] focus:bg-white focus:ring-4 focus:ring-[#4c8867]/10";
 
 export default function FindCEOsPage() {
   const [profiles, setProfiles] = useState<CEOProfile[]>([]);
@@ -28,7 +25,7 @@ export default function FindCEOsPage() {
     null
   );
 
-  const loadCEOs = useCallback(async () => {
+  async function loadCEOs() {
     setLoading(true);
     setError("");
 
@@ -40,11 +37,7 @@ export default function FindCEOsPage() {
         error: authError,
       } = await supabase.auth.getUser();
 
-      if (authError) {
-        throw authError;
-      }
-
-      if (!user) {
+      if (authError || !user) {
         window.location.href = "/login";
         return;
       }
@@ -60,26 +53,27 @@ export default function FindCEOsPage() {
         .order("full_name", { ascending: true });
 
       if (queryError) {
-        throw queryError;
+        console.error("Error loading CEO profiles:", queryError);
+        setError(
+          "We couldn't load the CEO directory. Please try again."
+        );
+        return;
       }
 
       setProfiles((data ?? []) as CEOProfile[]);
-    } catch (err: unknown) {
-      console.error("Unable to load CEO profiles:", err);
-
+    } catch (err) {
+      console.error("Unexpected error loading CEOs:", err);
       setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to load CEO profiles. Please try again."
+        "Something went wrong while loading the directory."
       );
     } finally {
       setLoading(false);
     }
-  }, []);
+  }
 
   useEffect(() => {
     void loadCEOs();
-  }, [loadCEOs]);
+  }, []);
 
   const industries = useMemo(() => {
     const values = profiles
@@ -103,11 +97,7 @@ export default function FindCEOsPage() {
       const profileLocation = (profile.location ?? "").toLowerCase();
 
       const matchesSearch =
-        !term ||
-        name.includes(term) ||
-        company.includes(term) ||
-        profileIndustry.includes(term) ||
-        profileLocation.includes(term);
+        !term || name.includes(term) || company.includes(term);
 
       const matchesIndustry =
         industry === "All industries" ||
@@ -124,593 +114,1302 @@ export default function FindCEOsPage() {
     });
   }, [profiles, search, industry, location]);
 
-  function clearFilters() {
-    setSearch("");
-    setIndustry("All industries");
-    setLocation("");
+  function getInitials(name: string | null) {
+    return (
+      (name ?? "")
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part.charAt(0).toUpperCase())
+        .join("") || "CEO"
+    );
   }
 
   return (
-    <main className="min-h-screen overflow-hidden bg-[#f8f8f4] text-[#182b28]">
-      {/* Navigation */}
-      <header className="sticky top-0 z-30 border-b border-[#e5e7df] bg-[#f8f8f4]/95 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-4 sm:px-8">
-          <Link
-            href="/dashboard"
-            aria-label="TYACDI BRIDGE dashboard"
-            className="flex min-w-0 items-center gap-3"
-          >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#182b28] text-lg font-black text-[#c8f0d4] shadow-lg shadow-[#182b28]/10">
-              T
-            </span>
+    <main className="ceo-page">
+      <style jsx global>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
 
-            <span className="min-w-0">
-              <span className="block text-sm font-extrabold tracking-tight sm:text-lg">
-                TYACDI <span className="text-[#4c8867]">BRIDGE</span>
-              </span>
+        .ceo-page,
+        .ceo-page * {
+          box-sizing: border-box;
+        }
 
-              <span className="mt-0.5 block text-[9px] font-bold uppercase tracking-[0.15em] text-[#7b877e] sm:text-[10px] sm:tracking-[0.2em]">
-                Learn · Build · Grow
-              </span>
-            </span>
+        .ceo-page {
+          --ceo-ink: #182b28;
+          --ceo-muted: #68766e;
+          --ceo-paper: #f8f8f4;
+          --ceo-green: #c8edcf;
+          --ceo-line: #e3e8df;
+          min-height: 100vh;
+          background: var(--ceo-paper);
+          color: var(--ceo-ink);
+          font-family: 'DM Sans', sans-serif;
+        }
+
+        .ceo-page a {
+          color: inherit;
+          text-decoration: none;
+        }
+
+        .ceo-container {
+          width: min(1160px, calc(100% - 48px));
+          margin: 0 auto;
+        }
+
+        .ceo-nav {
+          min-height: 78px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 20px;
+          border-bottom: 1px solid var(--ceo-line);
+        }
+
+        .ceo-brand {
+          display: flex;
+          align-items: center;
+          gap: 11px;
+          font-family: 'Manrope', sans-serif;
+          font-size: 17px;
+          font-weight: 800;
+          letter-spacing: -0.6px;
+        }
+
+        .ceo-brand-mark {
+          width: 38px;
+          height: 38px;
+          display: grid;
+          place-items: center;
+          border-radius: 11px;
+          background: var(--ceo-ink);
+          color: var(--ceo-green);
+          font-size: 22px;
+        }
+
+        .ceo-brand small {
+          display: block;
+          margin-top: 2px;
+          color: var(--ceo-muted);
+          font-family: 'DM Sans', sans-serif;
+          font-size: 9px;
+          font-weight: 500;
+          letter-spacing: 1.5px;
+        }
+
+        .ceo-nav-links {
+          display: flex;
+          align-items: center;
+          gap: 27px;
+          font-size: 12px;
+          color: #65736b;
+        }
+
+        .ceo-nav-links a:hover {
+          color: #398054;
+        }
+
+        .ceo-nav-active {
+          color: var(--ceo-ink) !important;
+          font-weight: 700;
+        }
+
+        .ceo-nav-button,
+        .ceo-button {
+          display: inline-flex;
+          justify-content: center;
+          align-items: center;
+          gap: 10px;
+          min-height: 43px;
+          padding: 0 17px;
+          border: 1px solid var(--ceo-ink);
+          border-radius: 6px;
+          background: var(--ceo-ink);
+          color: white !important;
+          font-size: 12px;
+          font-weight: 700;
+          transition: transform 0.2s, background 0.2s;
+          cursor: pointer;
+        }
+
+        .ceo-nav-button:hover,
+        .ceo-button:hover {
+          transform: translateY(-2px);
+          background: #29483d;
+        }
+
+        .ceo-hero {
+          position: relative;
+          display: grid;
+          grid-template-columns: 1.1fr 0.9fr;
+          align-items: center;
+          gap: 45px;
+          padding-top: 75px;
+          padding-bottom: 72px;
+        }
+
+        .ceo-eyebrow {
+          display: flex;
+          align-items: center;
+          gap: 9px;
+          color: #60776a;
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 1.8px;
+          text-transform: uppercase;
+        }
+
+        .ceo-eyebrow-dot {
+          width: 8px;
+          height: 8px;
+          flex-shrink: 0;
+          border-radius: 50%;
+          background: #4b9b69;
+          box-shadow: 0 0 0 4px #4b9b691b;
+        }
+
+        .ceo-hero h1 {
+          max-width: 650px;
+          margin: 24px 0 20px;
+          font-family: 'Manrope', sans-serif;
+          font-size: clamp(42px, 5.5vw, 67px);
+          font-weight: 700;
+          line-height: 1.08;
+          letter-spacing: -3px;
+        }
+
+        .ceo-hero h1 span {
+          color: #4b8963;
+        }
+
+        .ceo-hero-copy {
+          max-width: 490px;
+          color: var(--ceo-muted);
+          font-size: 15px;
+          line-height: 1.9;
+        }
+
+        .ceo-hero-actions {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 20px;
+          margin-top: 27px;
+        }
+
+        .ceo-text-link {
+          color: #385e47 !important;
+          font-size: 12px;
+          font-weight: 700;
+        }
+
+        .ceo-hero-art {
+          position: relative;
+          min-height: 360px;
+          display: grid;
+          place-items: center;
+          overflow: hidden;
+          border: 1px solid #e2e9df;
+          border-radius: 10px;
+          background:
+            radial-gradient(
+              circle at 50% 45%,
+              #d2e9d2 0,
+              transparent 48%
+            ),
+            linear-gradient(140deg, #eef2e9, #e0e9df);
+        }
+
+        .ceo-orbit {
+          position: absolute;
+          width: 82%;
+          height: 45%;
+          border: 1px solid #83a78a7a;
+          border-radius: 50%;
+          transform: rotate(-28deg);
+        }
+
+        .ceo-orbit-two {
+          width: 62%;
+          height: 80%;
+          transform: rotate(37deg);
+        }
+
+        .ceo-art-circle {
+          position: absolute;
+          width: 170px;
+          height: 170px;
+          border-radius: 50%;
+          background: #b9dfbf;
+          opacity: 0.65;
+        }
+
+        .ceo-art-card {
+          position: relative;
+          z-index: 2;
+          width: min(280px, 78%);
+          padding: 21px;
+          border: 1px solid #e1e8df;
+          border-radius: 11px;
+          background: white;
+          box-shadow: 0 22px 55px #213c2b18;
+        }
+
+        .ceo-art-card-label {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          color: #738176;
+          font-size: 9px;
+          letter-spacing: 1.3px;
+        }
+
+        .ceo-status-dot {
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+          background: #49a76c;
+        }
+
+        .ceo-art-person {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          margin: 23px 0 16px;
+        }
+
+        .ceo-art-avatar {
+          width: 48px;
+          height: 48px;
+          display: grid;
+          place-items: center;
+          border-radius: 50%;
+          background: #d9e9d8;
+          color: #315c3f;
+          font-family: 'Manrope', sans-serif;
+          font-weight: 800;
+        }
+
+        .ceo-art-person strong,
+        .ceo-art-person small {
+          display: block;
+        }
+
+        .ceo-art-person strong {
+          font-size: 13px;
+        }
+
+        .ceo-art-person small {
+          margin-top: 5px;
+          color: #778379;
+          font-size: 10px;
+        }
+
+        .ceo-art-quote {
+          padding-top: 14px;
+          border-top: 1px solid #e9eee7;
+          color: #5d6a61;
+          font-size: 11px;
+          line-height: 1.8;
+        }
+
+        .ceo-art-tags {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin-top: 13px;
+        }
+
+        .ceo-art-tags span {
+          padding: 6px 8px;
+          border-radius: 4px;
+          background: #eff5ed;
+          color: #52715b;
+          font-size: 9px;
+        }
+
+        .ceo-floating-note {
+          position: absolute;
+          z-index: 3;
+          right: 5%;
+          bottom: 9%;
+          padding: 13px 15px;
+          border: 1px solid #dfe7dd;
+          border-radius: 7px;
+          background: #fff;
+          box-shadow: 0 12px 28px #1e3a2810;
+          font-size: 10px;
+        }
+
+        .ceo-floating-note strong {
+          display: block;
+          margin-bottom: 4px;
+        }
+
+        .ceo-floating-note span {
+          color: #718077;
+        }
+
+        .ceo-stats {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          border-top: 1px solid var(--ceo-line);
+          border-bottom: 1px solid var(--ceo-line);
+          background: #f1f3ec;
+        }
+
+        .ceo-stat {
+          padding: 24px 20px;
+          text-align: center;
+        }
+
+        .ceo-stat + .ceo-stat {
+          border-left: 1px solid var(--ceo-line);
+        }
+
+        .ceo-stat strong {
+          display: block;
+          font-family: 'Manrope', sans-serif;
+          font-size: 23px;
+          font-weight: 800;
+        }
+
+        .ceo-stat span {
+          display: block;
+          margin-top: 5px;
+          color: #718077;
+          font-size: 10px;
+          letter-spacing: 0.6px;
+        }
+
+        .ceo-directory {
+          padding-top: 76px;
+          padding-bottom: 95px;
+          scroll-margin-top: 25px;
+        }
+
+        .ceo-directory-heading {
+          display: flex;
+          align-items: end;
+          justify-content: space-between;
+          gap: 25px;
+          margin-bottom: 29px;
+        }
+
+        .ceo-directory-heading h2 {
+          margin: 13px 0 9px;
+          font-family: 'Manrope', sans-serif;
+          font-size: clamp(29px, 4vw, 42px);
+          line-height: 1.15;
+          letter-spacing: -1.7px;
+        }
+
+        .ceo-directory-heading p {
+          max-width: 460px;
+          margin: 0;
+          color: var(--ceo-muted);
+          font-size: 13px;
+          line-height: 1.8;
+        }
+
+        .ceo-count {
+          flex-shrink: 0;
+          padding: 10px 13px;
+          border: 1px solid var(--ceo-line);
+          border-radius: 6px;
+          background: white;
+          color: #52675a;
+          font-size: 11px;
+          font-weight: 700;
+        }
+
+        .ceo-search-panel {
+          display: grid;
+          grid-template-columns: 1.6fr 1fr 1fr auto;
+          gap: 12px;
+          padding: 17px;
+          border: 1px solid #e1e7dd;
+          border-radius: 9px;
+          background: white;
+          box-shadow: 0 10px 35px #233d2b08;
+        }
+
+        .ceo-field label {
+          display: block;
+          margin-bottom: 8px;
+          color: #59695f;
+          font-size: 10px;
+          font-weight: 700;
+        }
+
+        .ceo-field input,
+        .ceo-field select {
+          width: 100%;
+          min-width: 0;
+          height: 44px;
+          padding: 0 12px;
+          border: 1px solid #dfe5dc;
+          border-radius: 5px;
+          outline: none;
+          background: #fbfcf9;
+          color: var(--ceo-ink);
+          font-family: 'DM Sans', sans-serif;
+          font-size: 12px;
+        }
+
+        .ceo-field input:focus,
+        .ceo-field select:focus {
+          border-color: #6a9e78;
+          box-shadow: 0 0 0 3px #6a9e7818;
+        }
+
+        .ceo-search-button {
+          align-self: end;
+          height: 44px;
+          padding: 0 17px;
+          border: 0;
+          border-radius: 5px;
+          background: var(--ceo-ink);
+          color: white;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 11px;
+          font-weight: 700;
+          cursor: pointer;
+        }
+
+        .ceo-search-button:hover {
+          background: #315044;
+        }
+
+        .ceo-results-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 15px;
+          margin: 31px 0 17px;
+        }
+
+        .ceo-results-row h3 {
+          margin: 0;
+          font-family: 'Manrope', sans-serif;
+          font-size: 18px;
+        }
+
+        .ceo-results-row span {
+          color: #7a857c;
+          font-size: 11px;
+        }
+
+        .ceo-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 17px;
+        }
+
+        .ceo-profile-card {
+          display: flex;
+          min-width: 0;
+          flex-direction: column;
+          padding: 22px;
+          border: 1px solid #e1e7de;
+          border-radius: 9px;
+          background: white;
+          box-shadow: 0 7px 25px #213a2a05;
+          transition: transform 0.2s, box-shadow 0.2s,
+            border-color 0.2s;
+        }
+
+        .ceo-profile-card:hover {
+          transform: translateY(-4px);
+          border-color: #c9d9c8;
+          box-shadow: 0 15px 35px #213a2a0e;
+        }
+
+        .ceo-card-top {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+        }
+
+        .ceo-avatar {
+          width: 56px;
+          height: 56px;
+          display: grid;
+          flex-shrink: 0;
+          place-items: center;
+          border: 1px solid #dce8d9;
+          border-radius: 50%;
+          background: linear-gradient(140deg, #e0eddd, #c6e1c8);
+          color: #315940;
+          font-family: 'Manrope', sans-serif;
+          font-size: 16px;
+          font-weight: 800;
+        }
+
+        .ceo-profile-badge {
+          padding: 7px 9px;
+          border-radius: 4px;
+          background: #eef6ed;
+          color: #497451;
+          font-size: 9px;
+          font-weight: 700;
+          letter-spacing: 0.5px;
+          text-transform: uppercase;
+        }
+
+        .ceo-profile-card h3 {
+          overflow-wrap: anywhere;
+          margin: 20px 0 5px;
+          font-family: 'Manrope', sans-serif;
+          font-size: 17px;
+          font-weight: 800;
+          letter-spacing: -0.5px;
+        }
+
+        .ceo-company {
+          color: #51665a;
+          font-size: 12px;
+          line-height: 1.6;
+        }
+
+        .ceo-location {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          margin-top: 13px;
+          color: #879188;
+          font-size: 10px;
+        }
+
+        .ceo-industry {
+          display: inline-flex;
+          align-self: flex-start;
+          margin-top: 15px;
+          padding: 7px 9px;
+          border-radius: 4px;
+          background: #f0f4ed;
+          color: #58715e;
+          font-size: 10px;
+        }
+
+        .ceo-bio {
+          display: -webkit-box;
+          overflow: hidden;
+          margin: 16px 0 21px;
+          color: #69766e;
+          font-size: 12px;
+          line-height: 1.8;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 3;
+        }
+
+        .ceo-card-bottom {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          margin-top: auto;
+          padding-top: 15px;
+          border-top: 1px solid #edf0e9;
+        }
+
+        .ceo-card-bottom small {
+          color: #78847b;
+          font-size: 10px;
+        }
+
+        .ceo-message-button {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 7px;
+          min-height: 36px;
+          padding: 0 11px;
+          border: 1px solid var(--ceo-ink);
+          border-radius: 5px;
+          background: var(--ceo-ink);
+          color: white !important;
+          font-size: 10px;
+          font-weight: 700;
+        }
+
+        .ceo-message-button:hover {
+          background: #315044;
+        }
+
+        .ceo-empty {
+          grid-column: 1 / -1;
+          padding: 50px 20px;
+          border: 1px dashed #cfd9cc;
+          border-radius: 9px;
+          background: white;
+          text-align: center;
+        }
+
+        .ceo-empty-icon {
+          width: 52px;
+          height: 52px;
+          display: grid;
+          place-items: center;
+          margin: 0 auto 17px;
+          border-radius: 50%;
+          background: #edf5eb;
+          color: #4c7c57;
+          font-size: 22px;
+        }
+
+        .ceo-empty h3 {
+          margin: 0 0 9px;
+          font-family: 'Manrope', sans-serif;
+          font-size: 19px;
+        }
+
+        .ceo-empty p {
+          margin: 0 auto 19px;
+          color: #758077;
+          font-size: 12px;
+          line-height: 1.8;
+        }
+
+        .ceo-error {
+          grid-column: 1 / -1;
+          padding: 18px;
+          border: 1px solid #f0d4d1;
+          border-radius: 7px;
+          background: #fff4f2;
+          color: #943e36;
+          font-size: 12px;
+          line-height: 1.8;
+        }
+
+        .ceo-loading {
+          grid-column: 1 / -1;
+          padding: 50px 20px;
+          border: 1px solid var(--ceo-line);
+          border-radius: 9px;
+          background: white;
+          color: #68766e;
+          text-align: center;
+          font-size: 13px;
+        }
+
+        .ceo-loading-dot {
+          display: inline-block;
+          width: 8px;
+          height: 8px;
+          margin-right: 8px;
+          border-radius: 50%;
+          background: #4c9463;
+          animation: ceo-pulse 1s infinite alternate;
+        }
+
+        @keyframes ceo-pulse {
+          from {
+            opacity: 0.35;
+            transform: scale(0.8);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1.15);
+          }
+        }
+
+        .ceo-cta {
+          position: relative;
+          overflow: hidden;
+          padding: 60px 25px;
+          border-radius: 10px;
+          background: #1b332b;
+          color: white;
+          text-align: center;
+        }
+
+        .ceo-cta::after {
+          position: absolute;
+          top: -70px;
+          right: -15px;
+          color: #ffffff08;
+          content: 'B.';
+          font-family: 'Manrope', sans-serif;
+          font-size: 220px;
+          font-weight: 800;
+          line-height: 1;
+          pointer-events: none;
+        }
+
+        .ceo-cta .ceo-eyebrow {
+          justify-content: center;
+          color: #b8d8bf;
+        }
+
+        .ceo-cta h2 {
+          position: relative;
+          z-index: 1;
+          margin: 18px 0 12px;
+          font-family: 'Manrope', sans-serif;
+          font-size: clamp(28px, 4vw, 42px);
+          letter-spacing: -1.6px;
+        }
+
+        .ceo-cta h2 span {
+          color: #bce8c7;
+        }
+
+        .ceo-cta p {
+          position: relative;
+          z-index: 1;
+          max-width: 530px;
+          margin: 0 auto 24px;
+          color: #c3d2c7;
+          font-size: 13px;
+          line-height: 1.9;
+        }
+
+        .ceo-cta .ceo-button {
+          position: relative;
+          z-index: 1;
+          border-color: #c8edcf;
+          background: #c8edcf;
+          color: #19362a !important;
+        }
+
+        .ceo-footer {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          flex-wrap: wrap;
+          gap: 18px;
+          padding-top: 24px;
+          padding-bottom: 24px;
+          color: #778279;
+          font-size: 10px;
+        }
+
+        .ceo-footer-brand {
+          color: var(--ceo-ink);
+          font-family: 'Manrope', sans-serif;
+          font-size: 13px;
+          font-weight: 800;
+        }
+
+        .ceo-footer-motto {
+          flex-basis: 100%;
+          margin: 0;
+          padding-top: 18px;
+          border-top: 1px solid var(--ceo-line);
+          color: #7d795a;
+          font-size: 11px;
+          line-height: 1.8;
+          text-align: center;
+        }
+
+        @media (max-width: 900px) {
+          .ceo-hero {
+            grid-template-columns: 1fr;
+            gap: 30px;
+            padding-top: 55px;
+          }
+
+          .ceo-hero-art {
+            min-height: 340px;
+          }
+
+          .ceo-search-panel {
+            grid-template-columns: 1fr 1fr;
+          }
+
+          .ceo-search-button {
+            width: 100%;
+          }
+
+          .ceo-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+
+        @media (max-width: 600px) {
+          .ceo-container {
+            width: calc(100% - 32px);
+          }
+
+          .ceo-nav {
+            min-height: 70px;
+            gap: 10px;
+          }
+
+          .ceo-brand {
+            gap: 8px;
+            font-size: 13px;
+          }
+
+          .ceo-brand-mark {
+            width: 33px;
+            height: 33px;
+            font-size: 19px;
+          }
+
+          .ceo-nav-links {
+            gap: 12px;
+            font-size: 10px;
+          }
+
+          .ceo-nav-links .ceo-nav-optional {
+            display: none;
+          }
+
+          .ceo-nav-button {
+            min-height: 36px;
+            padding: 0 10px;
+            font-size: 10px;
+          }
+
+          .ceo-hero {
+            padding-top: 47px;
+            padding-bottom: 45px;
+          }
+
+          .ceo-hero h1 {
+            margin-top: 20px;
+            font-size: clamp(39px, 10vw, 51px);
+            letter-spacing: -2.4px;
+          }
+
+          .ceo-hero-copy {
+            font-size: 13px;
+          }
+
+          .ceo-hero-art {
+            min-height: 310px;
+          }
+
+          .ceo-art-card {
+            padding: 17px;
+          }
+
+          .ceo-floating-note {
+            right: 3%;
+            bottom: 5%;
+          }
+
+          .ceo-stat {
+            padding: 19px 7px;
+          }
+
+          .ceo-stat strong {
+            font-size: 19px;
+          }
+
+          .ceo-stat span {
+            font-size: 8px;
+            line-height: 1.6;
+          }
+
+          .ceo-directory {
+            padding-top: 58px;
+            padding-bottom: 60px;
+          }
+
+          .ceo-directory-heading {
+            align-items: flex-start;
+            flex-direction: column;
+            gap: 14px;
+          }
+
+          .ceo-directory-heading h2 {
+            font-size: 33px;
+            letter-spacing: -1.2px;
+          }
+
+          .ceo-search-panel {
+            grid-template-columns: 1fr;
+            padding: 14px;
+          }
+
+          .ceo-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .ceo-profile-card {
+            padding: 21px;
+          }
+
+          .ceo-cta {
+            padding: 46px 18px;
+          }
+
+          .ceo-cta::after {
+            font-size: 150px;
+          }
+
+          .ceo-footer {
+            gap: 12px;
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .ceo-page *,
+          .ceo-page *::before,
+          .ceo-page *::after {
+            animation-duration: 0.01ms !important;
+            transition-duration: 0.01ms !important;
+            scroll-behavior: auto !important;
+          }
+        }
+      `}</style>
+
+      <header className="ceo-container ceo-nav">
+        <Link href="/dashboard" className="ceo-brand">
+          <span className="ceo-brand-mark">b.</span>
+          <span>
+            TYACDI BRIDGE
+            <small>LEARN · BUILD · GROW</small>
+          </span>
+        </Link>
+
+        <nav className="ceo-nav-links" aria-label="Main navigation">
+          <Link href="/dashboard">Dashboard</Link>
+          <Link href="/ceos" className="ceo-nav-active">
+            Find CEOs
           </Link>
+          <Link href="/messages" className="ceo-nav-optional">
+            Messages
+          </Link>
+        </nav>
 
-          <nav
-            aria-label="Main navigation"
-            className="flex shrink-0 items-center gap-1 sm:gap-3"
-          >
-            <Link
-              href="/dashboard"
-              className="rounded-lg px-2 py-2 text-xs font-semibold text-[#697672] transition hover:bg-[#eaf0e8] hover:text-[#182b28] sm:px-4 sm:text-sm"
-            >
-              Dashboard
-            </Link>
-
-            <Link
-              href="/messages"
-              className="rounded-lg bg-[#182b28] px-3 py-2.5 text-xs font-bold text-white transition hover:bg-[#25443c] sm:px-5 sm:text-sm"
-            >
-              Messages
-            </Link>
-          </nav>
-        </div>
+        <Link href="/dashboard" className="ceo-nav-button">
+          My Dashboard <span aria-hidden="true">↗</span>
+        </Link>
       </header>
 
-      {/* Hero */}
-      <section className="relative isolate overflow-hidden border-b border-[#e5e7df] bg-[#f8f8f4]">
-        <div className="pointer-events-none absolute -right-28 -top-20 -z-10 h-96 w-96 rounded-full bg-[#c8e5ce]/50 blur-3xl" />
-
-        <div className="pointer-events-none absolute -bottom-32 left-1/4 -z-10 h-80 w-80 rounded-full bg-[#e4eee0]/70 blur-3xl" />
-
-        <div className="mx-auto grid max-w-7xl items-center gap-10 px-4 py-12 sm:px-8 sm:py-20 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16 lg:py-24">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#dce7da] bg-white/80 px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[#526f5b] sm:text-xs sm:tracking-[0.16em]">
-              <span className="h-2 w-2 rounded-full bg-[#4c8867]" />
-              The TYACDI professional network
-            </div>
-
-            <h1 className="mt-7 text-4xl font-semibold leading-[1.1] tracking-[-0.06em] sm:text-5xl md:text-6xl lg:text-[4.4rem]">
-              Great connections.
-              <br />
-              <span className="text-[#4c8867]">
-                Greater possibilities.
-              </span>
-            </h1>
-
-            <p className="mt-6 max-w-xl text-sm leading-7 text-[#697672] sm:text-base sm:leading-8">
-              Meet CEOs and business executives, learn from their
-              experience, and build relationships that move your
-              ambitions forward.
-            </p>
-
-            <div className="mt-8 flex flex-wrap gap-3">
-              <a
-                href="#ceo-directory"
-                className="inline-flex items-center gap-3 rounded-lg bg-[#182b28] px-5 py-3.5 text-sm font-bold text-white shadow-lg shadow-[#182b28]/10 transition hover:-translate-y-0.5 hover:bg-[#25443c]"
-              >
-                Explore business leaders
-                <span aria-hidden="true">↓</span>
-              </a>
-
-              <Link
-                href="/messages"
-                className="inline-flex items-center rounded-lg border border-[#dce3d9] bg-white px-5 py-3.5 text-sm font-bold text-[#30483a] transition hover:border-[#b8d1ba] hover:bg-[#f0f5ed]"
-              >
-                View messages
-              </Link>
-            </div>
-
-            <div className="mt-10 flex flex-wrap gap-x-7 gap-y-3 border-t border-[#e5e7df] pt-6">
-              {["Leadership", "Mentorship", "Business growth"].map(
-                (item) => (
-                  <div
-                    key={item}
-                    className="flex items-center gap-2 text-xs font-semibold text-[#697672]"
-                  >
-                    <span className="h-1.5 w-1.5 rounded-full bg-[#78a884]" />
-                    {item}
-                  </div>
-                )
-              )}
-            </div>
+      <section className="ceo-container ceo-hero">
+        <div>
+          <div className="ceo-eyebrow">
+            <span className="ceo-eyebrow-dot" />
+            YOUR NEXT CHAPTER STARTS HERE
           </div>
 
-          {/* Network illustration */}
-          <div className="relative mx-auto flex min-h-[330px] w-full max-w-lg items-center justify-center sm:min-h-[410px]">
-            <div className="absolute h-64 w-64 rounded-full border border-[#b7d1b9]/70 sm:h-80 sm:w-80" />
+          <h1>
+            Great leaders.
+            <br />
+            <span>Greater possibilities.</span>
+          </h1>
 
-            <div className="absolute h-52 w-80 rotate-[-28deg] rounded-[50%] border border-[#b7d1b9]/70 sm:h-64 sm:w-[430px]" />
+          <p className="ceo-hero-copy">
+            Meet CEOs and business executives, learn from their
+            experience, and build relationships that move your
+            ambitions forward.
+          </p>
 
-            <div className="absolute h-72 w-48 rotate-[35deg] rounded-[50%] border border-[#b7d1b9]/60 sm:h-96 sm:w-64" />
+          <div className="ceo-hero-actions">
+            <a href="#ceo-directory" className="ceo-button">
+              Explore business leaders <span aria-hidden="true">↓</span>
+            </a>
 
-            <div className="absolute h-48 w-48 rounded-full bg-[#d9ebd8]/70 blur-2xl sm:h-64 sm:w-64" />
-
-            <div className="absolute left-[2%] top-[12%] rounded-xl border border-[#e1e8df] bg-white/95 p-3 shadow-lg shadow-[#243f30]/5 sm:left-[5%] sm:top-[17%]">
-              <p className="text-[9px] font-bold uppercase tracking-[0.13em] text-[#849184]">
-                Your network
-              </p>
-
-              <p className="mt-1.5 text-xs font-bold text-[#203c2a]">
-                New opportunities
-              </p>
-            </div>
-
-            <div className="absolute right-[1%] top-[20%] rounded-xl border border-[#e1e8df] bg-white/95 p-3 shadow-lg shadow-[#243f30]/5 sm:right-[1%] sm:top-[23%]">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#d8e9d7] text-xs font-black text-[#31583d]">
-                  CEO
-                </div>
-
-                <div>
-                  <p className="text-xs font-bold text-[#203c2a]">
-                    Leadership
-                  </p>
-
-                  <p className="mt-1 text-[10px] text-[#849184]">
-                    Experience that matters
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="relative z-10 w-[min(290px,85%)] rounded-2xl border border-white bg-white p-5 shadow-[0_25px_70px_rgba(24,43,40,0.12)] sm:p-6">
-              <div className="flex items-center justify-between border-b border-[#edf0e9] pb-4">
-                <div>
-                  <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#849184]">
-                    The right connection
-                  </p>
-
-                  <p className="mt-1 text-sm font-extrabold text-[#182b28]">
-                    Built on experience
-                  </p>
-                </div>
-
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#eaf4e9] text-[#4c8867]">
-                  ↗
-                </span>
-              </div>
-
-              <div className="mt-5 flex items-center gap-3">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#dcebd9] to-[#b8d8bf] text-lg font-black text-[#31583d]">
-                  TB
-                </div>
-
-                <div>
-                  <p className="text-sm font-extrabold text-[#182b28]">
-                    TYACDI BRIDGE
-                  </p>
-
-                  <p className="mt-1 text-xs text-[#697672]">
-                    Ambition meets experience.
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-5 rounded-xl bg-[#f2f6ef] p-3.5">
-                <p className="text-xs leading-6 text-[#52665a]">
-                  Learn from leaders. Discover opportunities. Build
-                  relationships that help you grow.
-                </p>
-              </div>
-
-              <div className="mt-4 flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#4c8867]" />
-                <span className="text-[10px] font-semibold text-[#65806b]">
-                  Learn · Build · Grow
-                </span>
-              </div>
-            </div>
-
-            <div className="absolute bottom-[8%] left-[2%] rounded-xl border border-[#e1e8df] bg-white/95 px-3 py-3 shadow-lg shadow-[#243f30]/5 sm:bottom-[9%] sm:left-[3%] sm:px-4">
-              <p className="text-[9px] font-bold uppercase tracking-[0.13em] text-[#849184]">
-                The mission
-              </p>
-
-              <p className="mt-1 text-xs font-extrabold text-[#31583d]">
-                Growth through connection
-              </p>
-            </div>
+            <Link href="/dashboard" className="ceo-text-link">
+              Back to dashboard <span aria-hidden="true">↗</span>
+            </Link>
           </div>
         </div>
 
-        {/* Three steps */}
-        <div className="border-t border-[#e5e7df] bg-[#f2f3ed]">
-          <div className="mx-auto grid max-w-7xl gap-0 px-4 sm:grid-cols-3 sm:px-8">
-            {[
-              {
-                number: "01",
-                title: "Discover",
-                description: "Find experienced business leaders",
-              },
-              {
-                number: "02",
-                title: "Connect",
-                description: "Start meaningful conversations",
-              },
-              {
-                number: "03",
-                title: "Grow",
-                description: "Learn from experience",
-              },
-            ].map((step, index) => (
-              <div
-                key={step.number}
-                className={`flex items-start gap-4 py-5 sm:px-5 sm:py-7 ${
-                  index > 0
-                    ? "sm:border-l sm:border-[#dfe5da]"
-                    : ""
-                }`}
-              >
-                <span className="pt-0.5 text-xs font-extrabold tracking-wider text-[#4c8867]">
-                  {step.number}
-                </span>
+        <div
+          className="ceo-hero-art"
+          aria-label="Illustration representing professional connections"
+          role="img"
+        >
+          <div className="ceo-art-circle" />
+          <div className="ceo-orbit" />
+          <div className="ceo-orbit ceo-orbit-two" />
 
-                <div>
-                  <p className="text-sm font-extrabold text-[#203c2a]">
-                    {step.title}
-                  </p>
+          <div className="ceo-art-card">
+            <div className="ceo-art-card-label">
+              <span className="ceo-status-dot" />
+              TYACDI PROFESSIONAL NETWORK
+            </div>
 
-                  <p className="mt-1 text-xs leading-5 text-[#758176]">
-                    {step.description}
-                  </p>
-                </div>
+            <div className="ceo-art-person">
+              <div className="ceo-art-avatar">CEO</div>
+              <div>
+                <strong>Leadership starts with connection.</strong>
+                <small>Experience · Vision · Growth</small>
               </div>
-            ))}
+            </div>
+
+            <div className="ceo-art-quote">
+              The right conversation can open the door to your next
+              opportunity.
+            </div>
+
+            <div className="ceo-art-tags">
+              <span>Leadership</span>
+              <span>Mentorship</span>
+              <span>Growth</span>
+            </div>
+          </div>
+
+          <div className="ceo-floating-note">
+            <strong>Build meaningful relationships</strong>
+            <span>Connect. Learn. Grow.</span>
           </div>
         </div>
       </section>
 
-      {/* Search and CEO directory */}
-      <section
-        id="ceo-directory"
-        className="mx-auto max-w-7xl px-4 py-14 sm:px-8 sm:py-20"
-      >
-        <div className="mb-9 grid gap-5 md:grid-cols-[1fr_0.7fr] md:items-end">
-          <div>
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-[#4c8867] sm:text-xs">
-              Explore the network
-            </p>
-
-            <h2 className="mt-3 text-3xl font-semibold tracking-[-0.05em] sm:text-4xl md:text-5xl">
-              Find your next
-              <br className="hidden sm:block" />{" "}
-              <span className="text-[#4c8867]">connection.</span>
-            </h2>
+      <section className="ceo-stats">
+        <div className="ceo-container" style={{ display: "contents" }}>
+          <div className="ceo-stat">
+            <strong>{profiles.length}</strong>
+            <span>BUSINESS LEADERS</span>
           </div>
-
-          <p className="max-w-md text-sm leading-7 text-[#697672] md:justify-self-end">
-            Search by name, company, industry, or location to
-            discover business leaders whose experience can help
-            you move forward.
-          </p>
+          <div className="ceo-stat">
+            <strong>01</strong>
+            <span>SHARED AMBITION</span>
+          </div>
+          <div className="ceo-stat">
+            <strong>∞</strong>
+            <span>POSSIBILITIES TO GROW</span>
+          </div>
         </div>
+      </section>
 
-        {/* Search card */}
-        <div className="rounded-2xl border border-[#e3e7de] bg-white p-5 shadow-[0_12px_45px_rgba(24,43,40,0.045)] sm:rounded-3xl sm:p-8">
-          <div className="mb-6 flex items-center gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#eaf3e8] text-[#31583d]">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                className="h-5 w-5"
-                aria-hidden="true"
-              >
-                <circle cx="11" cy="11" r="7" />
-                <path d="m16 16 4 4" />
-              </svg>
+      <section id="ceo-directory" className="ceo-container ceo-directory">
+        <div className="ceo-directory-heading">
+          <div>
+            <div className="ceo-eyebrow">
+              <span className="ceo-eyebrow-dot" />
+              THE CEO DIRECTORY
             </div>
 
-            <div>
-              <h3 className="text-base font-extrabold text-[#203c2a]">
-                Search business leaders
+            <h2>
+              Find your next
+              <br />
+              <span style={{ color: "#4b8963" }}>connection.</span>
+            </h2>
+
+            <p>
+              Search for experienced leaders by name, company,
+              industry, or location. Your next meaningful connection
+              could start here.
+            </p>
+          </div>
+
+          <div className="ceo-count">
+            {profiles.length} {profiles.length === 1 ? "CEO" : "CEOs"}{" "}
+            in the network
+          </div>
+        </div>
+
+        <div className="ceo-search-panel">
+          <div className="ceo-field">
+            <label htmlFor="ceo-search">NAME OR COMPANY</label>
+            <input
+              id="ceo-search"
+              type="search"
+              placeholder="e.g. business leader or company"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </div>
+
+          <div className="ceo-field">
+            <label htmlFor="ceo-industry">INDUSTRY</label>
+            <select
+              id="ceo-industry"
+              value={industry}
+              onChange={(event) => setIndustry(event.target.value)}
+            >
+              {industries.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="ceo-field">
+            <label htmlFor="ceo-location">LOCATION</label>
+            <input
+              id="ceo-location"
+              type="search"
+              placeholder="e.g. Lagos, Nigeria"
+              value={location}
+              onChange={(event) => setLocation(event.target.value)}
+            />
+          </div>
+
+          <button
+            type="button"
+            className="ceo-search-button"
+            onClick={() => {
+              document
+                .getElementById("ceo-results")
+                ?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+          >
+            Find CEOs ↗
+          </button>
+        </div>
+
+        <div id="ceo-results" className="ceo-results-row">
+          <h3>Business leaders</h3>
+          <span>
+            Showing {filteredCEOs.length} of {profiles.length} profiles
+          </span>
+        </div>
+
+        <div className="ceo-grid">
+          {loading ? (
+            <div className="ceo-loading">
+              <span className="ceo-loading-dot" />
+              Finding business leaders in the network...
+            </div>
+          ) : error ? (
+            <div className="ceo-error">
+              <strong>We couldn't load the directory.</strong>
+              <br />
+              {error}
+              <br />
+              <button
+                type="button"
+                className="ceo-search-button"
+                style={{ marginTop: 12 }}
+                onClick={() => void loadCEOs()}
+              >
+                Try again
+              </button>
+            </div>
+          ) : filteredCEOs.length === 0 ? (
+            <div className="ceo-empty">
+              <div className="ceo-empty-icon" aria-hidden="true">
+                ↗
+              </div>
+
+              <h3>
+                {profiles.length === 0
+                  ? "Your CEO network is just getting started."
+                  : "No matching CEOs found."}
               </h3>
 
-              <p className="mt-1 text-xs text-[#849184]">
-                Refine your search to find the right people
+              <p>
+                {profiles.length === 0
+                  ? "When members register with the CEO / Executive role, their profiles will appear here."
+                  : "Try another name, company, industry, or location."}
               </p>
-            </div>
-          </div>
 
-          <div className="grid gap-5 md:grid-cols-3">
-            <label className="block">
-              <span className="mb-2 block text-xs font-bold text-[#354a39]">
-                Name or company
-              </span>
-
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search CEOs..."
-                className={inputStyles}
-              />
-            </label>
-
-            <label className="block">
-              <span className="mb-2 block text-xs font-bold text-[#354a39]">
-                Industry
-              </span>
-
-              <select
-                value={industry}
-                onChange={(event) => setIndustry(event.target.value)}
-                className={inputStyles}
-              >
-                {industries.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="block">
-              <span className="mb-2 block text-xs font-bold text-[#354a39]">
-                Location
-              </span>
-
-              <input
-                value={location}
-                onChange={(event) => setLocation(event.target.value)}
-                placeholder="e.g. Lagos, Nigeria"
-                className={inputStyles}
-              />
-            </label>
-          </div>
-
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-[#edf0e9] pt-5">
-            <p
-              aria-live="polite"
-              className="text-xs font-medium text-[#758176]"
-            >
-              {loading
-                ? "Finding business leaders..."
-                : `${filteredCEOs.length} ${
-                    filteredCEOs.length === 1 ? "leader" : "leaders"
-                  } found`}
-            </p>
-
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="rounded-lg border border-[#dce5dc] px-4 py-2.5 text-xs font-bold text-[#31583d] transition hover:bg-[#edf3e9]"
-            >
-              Clear filters
-            </button>
-          </div>
-        </div>
-
-        {/* Directory heading */}
-        <div className="mb-7 mt-12 flex flex-col justify-between gap-3 sm:mt-16 sm:flex-row sm:items-end">
-          <div>
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-[#4c8867] sm:text-xs">
-              The TYACDI network
-            </p>
-
-            <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] sm:text-3xl">
-              CEO directory
-            </h2>
-          </div>
-
-          <p className="text-xs text-[#758176]">
-            Connect with experience. Build with purpose.
-          </p>
-        </div>
-
-        {/* Loading state */}
-        {loading ? (
-          <div className="rounded-2xl border border-[#e3e7de] bg-white px-6 py-20 text-center sm:rounded-3xl">
-            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-[#e1eadf] border-t-[#31583d]" />
-
-            <p className="mt-5 text-sm font-bold text-[#203c2a]">
-              Loading CEO profiles
-            </p>
-
-            <p className="mt-2 text-xs text-[#849184]">
-              Finding leaders in the TYACDI network...
-            </p>
-          </div>
-        ) : error ? (
-          <div
-            role="alert"
-            className="rounded-2xl border border-red-200 bg-white p-6 sm:rounded-3xl sm:p-9"
-          >
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 text-lg font-bold text-red-700">
-              !
-            </div>
-
-            <h3 className="mt-4 text-lg font-extrabold text-[#203c2a]">
-              Unable to load CEO profiles
-            </h3>
-
-            <p className="mt-3 break-words text-sm leading-7 text-[#758176]">
-              {error}
-            </p>
-
-            <button
-              type="button"
-              onClick={() => void loadCEOs()}
-              className="mt-5 rounded-lg bg-[#182b28] px-5 py-3 text-xs font-bold text-white transition hover:bg-[#25443c]"
-            >
-              Try again
-            </button>
-          </div>
-        ) : filteredCEOs.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-[#cbd9c8] bg-white px-6 py-16 text-center sm:rounded-3xl sm:py-20">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#eaf3e8] text-[#31583d]">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.7"
-                className="h-7 w-7"
-                aria-hidden="true"
-              >
-                <circle cx="9" cy="8" r="4" />
-                <path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6" />
-                <path d="M16 5a4 4 0 0 1 0 7.8M18 14c2.2.8 3.5 2.8 3.5 5.5" />
-              </svg>
-            </div>
-
-            <h3 className="mt-5 text-xl font-extrabold text-[#203c2a]">
-              {profiles.length === 0
-                ? "No CEOs have joined the directory yet"
-                : "No matching CEOs found"}
-            </h3>
-
-            <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-[#758176]">
-              {profiles.length === 0
-                ? "Business leaders will appear here when members have completed their profiles and selected the CEO / Executive role."
-                : "Try another name, industry, or location, or clear your filters to see all available CEOs."}
-            </p>
-
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="mt-6 rounded-lg bg-[#182b28] px-6 py-3 text-xs font-bold text-white transition hover:bg-[#25443c]"
-            >
-              Reset search
-            </button>
-          </div>
-        ) : (
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredCEOs.map((ceo) => {
-              const initials =
-                (ceo.full_name ?? "")
-                  .trim()
-                  .split(/\s+/)
-                  .filter(Boolean)
-                  .slice(0, 2)
-                  .map((part) => part[0]?.toUpperCase())
-                  .join("") || "CEO";
-
-              return (
-                <article
-                  key={ceo.id}
-                  className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-[#e3e7de] bg-white shadow-[0_5px_24px_rgba(24,43,40,0.035)] transition duration-300 hover:-translate-y-1 hover:border-[#c4d8c5] hover:shadow-[0_18px_40px_rgba(24,43,40,0.09)] sm:rounded-3xl"
+              {profiles.length > 0 && (
+                <button
+                  type="button"
+                  className="ceo-button"
+                  onClick={() => {
+                    setSearch("");
+                    setIndustry("All industries");
+                    setLocation("");
+                  }}
                 >
-                  <div className="h-1 bg-gradient-to-r from-[#182b28] via-[#4c8867] to-[#bce8cb]" />
-
-                  <div className="flex flex-1 flex-col p-5 sm:p-6">
-                    <div className="flex items-start gap-4">
-                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-[#dce8d8] bg-gradient-to-br from-[#edf5e9] to-[#d7e9d5] text-base font-extrabold text-[#31583d]">
-                        {initials}
-                      </div>
-
-                      <div className="min-w-0 flex-1 pt-1">
-                        <h3 className="break-words text-base font-extrabold text-[#203c2a]">
-                          {ceo.full_name || "TYACDI Member"}
-                        </h3>
-
-                        <p className="mt-1 text-xs font-bold text-[#4c8867]">
-                          CEO / Executive
-                        </p>
-
-                        {ceo.company && (
-                          <p className="mt-1.5 break-words text-xs text-[#758176]">
-                            {ceo.company}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="mt-5 flex min-h-6 flex-wrap gap-2">
-                      {ceo.industry && (
-                        <span className="rounded-md border border-[#dce8d8] bg-[#edf5e9] px-2.5 py-1.5 text-[10px] font-bold text-[#31583d]">
-                          {ceo.industry}
-                        </span>
-                      )}
-
-                      {ceo.location && (
-                        <span className="rounded-md bg-[#f3f5f0] px-2.5 py-1.5 text-[10px] font-medium text-[#667568]">
-                          {ceo.location}
-                        </span>
-                      )}
-                    </div>
-
-                    <p className="mt-5 flex-1 whitespace-pre-line break-words text-xs leading-7 text-[#697672]">
-                      {ceo.bio ||
-                        "This executive has not added a biography yet."}
-                    </p>
-
-                    <div className="mt-6 border-t border-[#edf0e9] pt-5">
-                      {ceo.id === currentUserId ? (
-                        <Link
-                          href="/dashboard"
-                          className="flex w-full items-center justify-center rounded-lg border border-[#dce5d9] bg-[#f5f7f2] px-4 py-3 text-xs font-bold text-[#667568] transition hover:bg-[#edf3ea]"
-                        >
-                          View your dashboard
-                        </Link>
-                      ) : (
-                        <Link
-                          href={`/messages?user=${encodeURIComponent(ceo.id)}`}
-                          className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#182b28] px-4 py-3 text-xs font-bold text-white transition hover:bg-[#25443c] focus:outline-none focus:ring-4 focus:ring-[#4c8867]/20"
-                        >
-                          Message CEO
-                          <span aria-hidden="true">→</span>
-                        </Link>
-                      )}
-                    </div>
+                  Clear filters
+                </button>
+              )}
+            </div>
+          ) : (
+            filteredCEOs.map((ceo) => (
+              <article key={ceo.id} className="ceo-profile-card">
+                <div className="ceo-card-top">
+                  <div className="ceo-avatar">
+                    {getInitials(ceo.full_name)}
                   </div>
-                </article>
-              );
-            })}
-          </div>
-        )}
 
-        {/* Footer */}
-        <footer className="mt-16 border-t border-[#e5e7df] pt-8 sm:mt-20">
-          <div className="flex flex-col items-center justify-between gap-5 text-center sm:flex-row sm:text-left">
-            <Link
-              href="/dashboard"
-              className="flex items-center gap-2.5"
-            >
-              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#182b28] text-base font-black text-[#c8f0d4]">
-                T
-              </span>
+                  <span className="ceo-profile-badge">
+                    CEO / Executive
+                  </span>
+                </div>
 
-              <span className="text-sm font-extrabold tracking-tight text-[#182b28]">
-                TYACDI <span className="text-[#4c8867]">BRIDGE</span>
-              </span>
-            </Link>
+                <h3>{ceo.full_name || "Business Leader"}</h3>
 
-            <p className="text-xs text-[#758176]">
-              Connecting ambition with experience.
-            </p>
-          </div>
+                <div className="ceo-company">
+                  {ceo.company || "Independent Executive"}
+                </div>
 
-          <div className="mt-6 border-t border-[#e5e7df] py-5 text-center">
-            <p className="text-sm font-semibold text-[#4c8867]">
-              Growth is gradual... But with us exponential.
-            </p>
+                <div className="ceo-location">
+                  <span aria-hidden="true">⌖</span>
+                  {ceo.location || "Location not provided"}
+                </div>
 
-            <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#849184]">
-              Learn · Build · Grow
-            </p>
-          </div>
-        </footer>
+                {ceo.industry && (
+                  <div className="ceo-industry">{ceo.industry}</div>
+                )}
+
+                <p className="ceo-bio">
+                  {ceo.bio ||
+                    "A member of the TYACDI BRIDGE professional network. Connect to start a conversation and explore opportunities to learn and grow."}
+                </p>
+
+                <div className="ceo-card-bottom">
+                  <small>Professional network</small>
+
+                  {ceo.id === currentUserId ? (
+                    <Link
+                      href="/dashboard"
+                      className="ceo-message-button"
+                    >
+                      Your profile ↗
+                    </Link>
+                  ) : (
+                    <Link
+                      href={`/messages?user=${encodeURIComponent(ceo.id)}`}
+                      className="ceo-message-button"
+                    >
+                      Message CEO <span aria-hidden="true">↗</span>
+                    </Link>
+                  )}
+                </div>
+              </article>
+            ))
+          )}
+        </div>
       </section>
+
+      <section className="ceo-container">
+        <div className="ceo-cta">
+          <div className="ceo-eyebrow">
+            <span className="ceo-eyebrow-dot" />
+            YOUR GROWTH MATTERS
+          </div>
+
+          <h2>
+            Your ambition deserves
+            <br />
+            <span>the right connections.</span>
+          </h2>
+
+          <p>
+            Learn from experience, share ideas, and build relationships
+            that help you move forward. Every great connection begins
+            with a conversation.
+          </p>
+
+          <Link href="/messages" className="ceo-button">
+            Start a conversation ↗
+          </Link>
+        </div>
+      </section>
+
+      <footer className="ceo-container ceo-footer">
+        <Link href="/dashboard" className="ceo-footer-brand">
+          TYACDI BRIDGE
+        </Link>
+
+        <span>LEARN · BUILD · GROW</span>
+
+        <Link href="/ceos">Find CEOs</Link>
+        <Link href="/messages">Messages</Link>
+
+        <p className="ceo-footer-motto">
+          “Tosi says: You also can do it.” Growth is gradual... But with
+          us exponential.
+          <br />
+          <span>Founder: WEYA-AJAYI VICTOR</span>
+        </p>
+      </footer>
     </main>
   );
 }
