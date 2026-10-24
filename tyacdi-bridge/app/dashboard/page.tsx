@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 type Profile = {
@@ -27,6 +27,21 @@ type ConnectionRequest = {
     role?: string;
     company?: string | null;
   } | null;
+};
+
+type Notification = {
+  id: string;
+  user_id: string;
+  actor_id: string | null;
+  type:
+    | "connection_request"
+    | "connection_accepted"
+    | "new_message";
+  title: string;
+  body: string;
+  link: string;
+  is_read: boolean;
+  created_at: string;
 };
 
 const roles = [
@@ -55,10 +70,22 @@ function deleteButtonStyle(disabled: boolean) {
   } as const;
 }
 
+function formatNotificationDate(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "";
+
+  return date.toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
 export default function Dashboard() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [members, setMembers] = useState<Profile[]>([]);
   const [requests, setRequests] = useState<ConnectionRequest[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [userId, setUserId] = useState("");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
@@ -68,10 +95,37 @@ export default function Dashboard() {
   const [isEditingProfile, setIsEditingProfile] = useState(true);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [workingRequest, setWorkingRequest] = useState("");
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [markingAllRead, setMarkingAllRead] = useState(false);
+  const [markingNotification, setMarkingNotification] = useState("");
 
-  // Separate input fields for adding interests and qualifications.
   const [interestInput, setInterestInput] = useState("");
   const [qualificationInput, setQualificationInput] = useState("");
+
+  const unreadCount = useMemo(
+    () => notifications.filter((notification) => !notification.is_read).length,
+    [notifications]
+  );
+
+  const loadNotifications = useCallback(async (currentUserId: string) => {
+    const supabase = createClient();
+
+    const { data, error } = await supabase
+      .from("notifications")
+      .select(
+        "id,user_id,actor_id,type,title,body,link,is_read,created_at"
+      )
+      .eq("user_id", currentUserId)
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (error) {
+      console.error("Could not load notifications:", error.message);
+      return;
+    }
+
+    setNotifications((data || []) as Notification[]);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -156,6 +210,8 @@ export default function Dashboard() {
         setProfile(currentProfile as Profile);
         setMembers((people || []) as Profile[]);
         setRequests((pendingRequests || []) as ConnectionRequest[]);
+
+        await loadNotifications(user.id);
       } catch (error: unknown) {
         if (active) {
           setMessage(
@@ -169,12 +225,49 @@ export default function Dashboard() {
       }
     }
 
-    loadDashboard();
+    void loadDashboard();
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [loadNotifications]);
+
+  // Keep notifications updated while the dashboard is open.
+  useEffect(() => {
+    if (!userId) return;
+
+    const supabase = createClient();
+
+    const channel = supabase
+      .channel(`tyacdi-notifications-${userId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${userId}`,
+        },
+        () => {
+          void loadNotifications(userId);
+        }
+      )
+      .subscribe((status) => {
+        if (status === "CHANNEL_ERROR") {
+          console.error("Notification realtime subscription failed.");
+        }
+      });
+
+    // Refresh periodically as a fallback.
+    const interval = window.setInterval(() => {
+      void loadNotifications(userId);
+    }, 30000);
+
+    return () => {
+      window.clearInterval(interval);
+      void supabase.removeChannel(channel);
+    };
+  }, [userId, loadNotifications]);
 
   async function saveProfile(
     event: React.FormEvent<HTMLFormElement>
@@ -369,6 +462,84 @@ export default function Dashboard() {
     }
   }
 
+  async function markNotificationRead(notification: Notification) {
+    if (notification.is_read || markingNotification) return;
+
+    setMarkingNotification(notification.id);
+
+    try {
+      const supabase = createClient();
+
+      const { error } = await supabase
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("id", notification.id)
+        .eq("user_id", userId);
+
+      if (error) throw error;
+
+      setNotifications((current) =>
+        current.map((item) =>
+          item.id === notification.id
+            ? { ...item, is_read: true }
+            : item
+        )
+      );
+    } catch (error: unknown) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not mark notification as read."
+      );
+    } finally {
+      setMarkingNotification("");
+    }
+  }
+
+  async function markAllNotificationsRead() {
+    if (!userId || unreadCount === 0 || markingAllRead) return;
+
+    setMarkingAllRead(true);
+
+    try {
+      const supabase = createClient();
+
+      const { error } = await supabase
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("user_id", userId)
+        .eq("is_read", false);
+
+      if (error) throw error;
+
+      setNotifications((current) =>
+        current.map((item) => ({ ...item, is_read: true }))
+      );
+
+      setMessage("All notifications marked as read.");
+    } catch (error: unknown) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not update notifications."
+      );
+    } finally {
+      setMarkingAllRead(false);
+    }
+  }
+
+  async function openNotification(notification: Notification) {
+    await markNotificationRead(notification);
+    setNotificationsOpen(false);
+
+    const allowedLinks = ["/dashboard", "/messages"];
+    const destination = allowedLinks.includes(notification.link)
+      ? notification.link
+      : "/dashboard";
+
+    window.location.assign(destination);
+  }
+
   async function deleteAccount() {
     if (deletingAccount) return;
 
@@ -401,7 +572,6 @@ export default function Dashboard() {
     setMessage("Deleting your account...");
 
     try {
-      // This URL must match the location of your API route.
       const response = await fetch("/api/delete-account", {
         method: "POST",
         headers: {
@@ -526,6 +696,110 @@ export default function Dashboard() {
 
           <div className="nav-actions">
             <span>{profile?.full_name || "Member"}</span>
+
+            <div className="notification-wrapper">
+              <button
+                type="button"
+                className="notification-bell"
+                aria-label={
+                  unreadCount > 0
+                    ? `Notifications, ${unreadCount} unread`
+                    : "Notifications"
+                }
+                aria-expanded={notificationsOpen}
+                onClick={() =>
+                  setNotificationsOpen((open) => !open)
+                }
+              >
+                <span aria-hidden="true">♧</span>
+                <span className="bell-label">Notifications</span>
+
+                {unreadCount > 0 && (
+                  <span className="notification-count">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {notificationsOpen && (
+                <section
+                  className="notification-popover"
+                  aria-label="Your notifications"
+                >
+                  <div className="notification-heading">
+                    <div>
+                      <strong>Notifications</strong>
+                      <small>
+                        {unreadCount === 0
+                          ? "You're all caught up."
+                          : `${unreadCount} unread`}
+                      </small>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="notification-close"
+                      aria-label="Close notifications"
+                      onClick={() => setNotificationsOpen(false)}
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  {unreadCount > 0 && (
+                    <button
+                      type="button"
+                      className="mark-all-read"
+                      disabled={markingAllRead}
+                      onClick={markAllNotificationsRead}
+                    >
+                      {markingAllRead
+                        ? "Updating..."
+                        : "Mark all as read"}
+                    </button>
+                  )}
+
+                  <div className="notification-list">
+                    {notifications.length === 0 ? (
+                      <p className="notification-empty">
+                        No notifications yet. New messages and connection
+                        activity will appear here.
+                      </p>
+                    ) : (
+                      notifications.map((notification) => (
+                        <button
+                          type="button"
+                          key={notification.id}
+                          className={`notification-item ${
+                            notification.is_read ? "" : "unread"
+                          }`}
+                          onClick={() =>
+                            void openNotification(notification)
+                          }
+                          disabled={
+                            markingNotification === notification.id
+                          }
+                        >
+                          <span className="notification-dot">
+                            {!notification.is_read ? "●" : "○"}
+                          </span>
+
+                          <span className="notification-copy">
+                            <strong>{notification.title}</strong>
+                            <span>{notification.body}</span>
+                            <small>
+                              {formatNotificationDate(
+                                notification.created_at
+                              )}
+                            </small>
+                          </span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </section>
+              )}
+            </div>
 
             <Link
               href="/messages"
@@ -857,16 +1131,9 @@ export default function Dashboard() {
                     placeholder="What are you working toward?"
                   />
 
-                  {/* INTERESTS: add items individually */}
                   <label htmlFor="pf-interests">Interests</label>
 
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 8,
-                      alignItems: "stretch",
-                    }}
-                  >
+                  <div className="tag-input-row">
                     <input
                       id="pf-interests"
                       value={interestInput}
@@ -891,36 +1158,14 @@ export default function Dashboard() {
                     </button>
                   </div>
 
-                  <div
-                    className="member-tags"
-                    style={{
-                      display: "flex",
-                      flexWrap: "wrap",
-                      gap: 8,
-                    }}
-                  >
+                  <div className="member-tags editable-tags">
                     {(profile.interests || []).map((interest) => (
-                      <span
-                        key={interest}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 6,
-                        }}
-                      >
+                      <span key={interest}>
                         {interest}
-
                         <button
                           type="button"
                           aria-label={`Remove ${interest}`}
                           onClick={() => removeInterest(interest)}
-                          style={{
-                            border: 0,
-                            background: "transparent",
-                            cursor: "pointer",
-                            fontWeight: "bold",
-                            padding: 0,
-                          }}
                         >
                           ×
                         </button>
@@ -928,18 +1173,11 @@ export default function Dashboard() {
                     ))}
                   </div>
 
-                  {/* QUALIFICATIONS: add items individually */}
                   <label htmlFor="pf-qualifications">
                     Qualifications
                   </label>
 
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 8,
-                      alignItems: "stretch",
-                    }}
-                  >
+                  <div className="tag-input-row">
                     <input
                       id="pf-qualifications"
                       value={qualificationInput}
@@ -964,39 +1202,17 @@ export default function Dashboard() {
                     </button>
                   </div>
 
-                  <div
-                    className="member-tags"
-                    style={{
-                      display: "flex",
-                      flexWrap: "wrap",
-                      gap: 8,
-                    }}
-                  >
+                  <div className="member-tags editable-tags">
                     {(profile.qualifications || []).map(
                       (qualification) => (
-                        <span
-                          key={qualification}
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 6,
-                          }}
-                        >
+                        <span key={qualification}>
                           {qualification}
-
                           <button
                             type="button"
                             aria-label={`Remove ${qualification}`}
                             onClick={() =>
                               removeQualification(qualification)
                             }
-                            style={{
-                              border: 0,
-                              background: "transparent",
-                              cursor: "pointer",
-                              fontWeight: "bold",
-                              padding: 0,
-                            }}
                           >
                             ×
                           </button>
@@ -1133,12 +1349,203 @@ export default function Dashboard() {
 
       <footer className="wrap dash-footer">
         TYACDI BRIDGE · Learn. Build. Grow.
-        <span style={{ float: "right" }}>
-          Be respectful. Build trust.
-        </span>
+        <span className="footer-right">Be respectful. Build trust.</span>
       </footer>
 
       <style jsx>{`
+        .notification-wrapper {
+          position: relative;
+        }
+
+        .notification-bell {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 7px;
+          min-height: 40px;
+          padding: 9px 12px;
+          border: 1px solid #d7dce3;
+          border-radius: 9px;
+          background: #fff;
+          color: #172033;
+          font: inherit;
+          font-weight: 600;
+          cursor: pointer;
+        }
+
+        .notification-bell:hover {
+          background: #f5f7fa;
+        }
+
+        .notification-count {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 20px;
+          height: 20px;
+          padding: 0 5px;
+          border-radius: 999px;
+          background: #bd3030;
+          color: #fff;
+          font-size: 11px;
+          font-weight: 700;
+        }
+
+        .notification-popover {
+          position: absolute;
+          top: calc(100% + 10px);
+          right: 0;
+          z-index: 100;
+          width: min(370px, calc(100vw - 28px));
+          max-height: 440px;
+          overflow: hidden;
+          border: 1px solid #e1e5eb;
+          border-radius: 13px;
+          background: #fff;
+          color: #172033;
+          box-shadow: 0 14px 40px rgba(16, 24, 40, 0.16);
+        }
+
+        .notification-heading {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 12px;
+          padding: 16px;
+          border-bottom: 1px solid #edf0f4;
+        }
+
+        .notification-heading > div {
+          display: grid;
+          gap: 4px;
+        }
+
+        .notification-heading strong {
+          font-size: 16px;
+        }
+
+        .notification-heading small {
+          color: #657084;
+          font-size: 12px;
+        }
+
+        .notification-close {
+          border: 0;
+          background: transparent;
+          color: #667085;
+          font-size: 25px;
+          cursor: pointer;
+        }
+
+        .mark-all-read {
+          display: block;
+          width: 100%;
+          padding: 10px 16px;
+          border: 0;
+          border-bottom: 1px solid #edf0f4;
+          background: #f7f9fc;
+          color: #244f83;
+          text-align: left;
+          font: inherit;
+          font-size: 12px;
+          font-weight: 700;
+          cursor: pointer;
+        }
+
+        .notification-list {
+          max-height: 320px;
+          overflow-y: auto;
+        }
+
+        .notification-item {
+          display: flex;
+          align-items: flex-start;
+          gap: 10px;
+          width: 100%;
+          padding: 13px 15px;
+          border: 0;
+          border-bottom: 1px solid #edf0f4;
+          background: #fff;
+          color: inherit;
+          text-align: left;
+          cursor: pointer;
+        }
+
+        .notification-item:hover {
+          background: #f7f9fc;
+        }
+
+        .notification-item.unread {
+          background: #f0f6ff;
+        }
+
+        .notification-dot {
+          padding-top: 3px;
+          color: #3269b2;
+          font-size: 11px;
+        }
+
+        .notification-copy {
+          display: grid;
+          gap: 5px;
+          min-width: 0;
+        }
+
+        .notification-copy strong {
+          font-size: 13px;
+        }
+
+        .notification-copy > span {
+          color: #525e70;
+          font-size: 12px;
+          line-height: 1.5;
+          overflow-wrap: anywhere;
+        }
+
+        .notification-copy small {
+          color: #7a8494;
+          font-size: 11px;
+        }
+
+        .notification-empty {
+          margin: 0;
+          padding: 20px 16px;
+          color: #657084;
+          font-size: 13px;
+          line-height: 1.6;
+        }
+
+        .tag-input-row {
+          display: flex;
+          gap: 8px;
+          align-items: stretch;
+        }
+
+        .editable-tags {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        .editable-tags span {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .editable-tags button {
+          padding: 0;
+          border: 0;
+          background: transparent;
+          font-weight: bold;
+          cursor: pointer;
+        }
+
+        .footer-right {
+          float: right;
+        }
+
         @media (max-width: 760px) {
           .dashboard-grid {
             grid-template-columns: minmax(0, 1fr) !important;
@@ -1147,7 +1554,25 @@ export default function Dashboard() {
           .nav-actions {
             display: flex;
             flex-wrap: wrap;
+            align-items: center;
             gap: 8px;
+          }
+
+          .bell-label {
+            display: none;
+          }
+
+          .notification-popover {
+            position: fixed;
+            top: 80px;
+            right: 12px;
+            max-height: min(75vh, 500px);
+          }
+
+          .footer-right {
+            float: none;
+            display: block;
+            margin-top: 8px;
           }
         }
       `}</style>
