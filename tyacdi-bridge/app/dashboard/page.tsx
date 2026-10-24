@@ -39,17 +39,6 @@ const roles = [
   "Investor",
 ];
 
-function parseList(value: string): string[] {
-  return Array.from(
-    new Set(
-      value
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean)
-    )
-  );
-}
-
 function deleteButtonStyle(disabled: boolean) {
   return {
     display: "block",
@@ -79,6 +68,10 @@ export default function Dashboard() {
   const [isEditingProfile, setIsEditingProfile] = useState(true);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [workingRequest, setWorkingRequest] = useState("");
+
+  // Separate input fields for adding interests and qualifications.
+  const [interestInput, setInterestInput] = useState("");
+  const [qualificationInput, setQualificationInput] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -218,6 +211,8 @@ export default function Dashboard() {
       if (error) throw error;
 
       setProfile(data as Profile);
+      setInterestInput("");
+      setQualificationInput("");
       setIsEditingProfile(false);
       setMessage("Your profile has been saved.");
     } catch (error: unknown) {
@@ -229,6 +224,82 @@ export default function Dashboard() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function addInterest() {
+    if (!profile) return;
+
+    const value = interestInput.trim();
+
+    if (!value) return;
+
+    const existing = profile.interests || [];
+
+    if (
+      existing.some(
+        (item) => item.toLowerCase() === value.toLowerCase()
+      )
+    ) {
+      setMessage("That interest has already been added.");
+      return;
+    }
+
+    setProfile({
+      ...profile,
+      interests: [...existing, value],
+    });
+
+    setInterestInput("");
+    setMessage("");
+  }
+
+  function removeInterest(interest: string) {
+    if (!profile) return;
+
+    setProfile({
+      ...profile,
+      interests: (profile.interests || []).filter(
+        (item) => item !== interest
+      ),
+    });
+  }
+
+  function addQualification() {
+    if (!profile) return;
+
+    const value = qualificationInput.trim();
+
+    if (!value) return;
+
+    const existing = profile.qualifications || [];
+
+    if (
+      existing.some(
+        (item) => item.toLowerCase() === value.toLowerCase()
+      )
+    ) {
+      setMessage("That qualification has already been added.");
+      return;
+    }
+
+    setProfile({
+      ...profile,
+      qualifications: [...existing, value],
+    });
+
+    setQualificationInput("");
+    setMessage("");
+  }
+
+  function removeQualification(qualification: string) {
+    if (!profile) return;
+
+    setProfile({
+      ...profile,
+      qualifications: (profile.qualifications || []).filter(
+        (item) => item !== qualification
+      ),
+    });
   }
 
   async function connect(toUser: string) {
@@ -330,7 +401,8 @@ export default function Dashboard() {
     setMessage("Deleting your account...");
 
     try {
-      const response = await fetch("/api/account/delete", {
+      // This URL must match the location of your API route.
+      const response = await fetch("/api/delete-account", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -658,6 +730,7 @@ export default function Dashboard() {
                   {!!profile.interests?.length && (
                     <div style={{ marginTop: 12 }}>
                       <strong>Interests</strong>
+
                       <div className="member-tags">
                         {profile.interests.map((interest) => (
                           <span key={interest}>{interest}</span>
@@ -669,9 +742,12 @@ export default function Dashboard() {
                   {!!profile.qualifications?.length && (
                     <div style={{ marginTop: 14 }}>
                       <strong>Qualifications</strong>
+
                       <div className="member-tags">
                         {profile.qualifications.map((qualification) => (
-                          <span key={qualification}>{qualification}</span>
+                          <span key={qualification}>
+                            {qualification}
+                          </span>
                         ))}
                       </div>
                     </div>
@@ -781,37 +857,153 @@ export default function Dashboard() {
                     placeholder="What are you working toward?"
                   />
 
-                  <label htmlFor="pf-interests">
-                    Interests (separate with commas)
-                  </label>
+                  {/* INTERESTS: add items individually */}
+                  <label htmlFor="pf-interests">Interests</label>
 
-                  <input
-                    id="pf-interests"
-                    value={(profile.interests || []).join(", ")}
-                    onChange={(event) =>
-                      setProfile({
-                        ...profile,
-                        interests: parseList(event.target.value),
-                      })
-                    }
-                    placeholder="Startups, technology, investing"
-                  />
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      alignItems: "stretch",
+                    }}
+                  >
+                    <input
+                      id="pf-interests"
+                      value={interestInput}
+                      onChange={(event) =>
+                        setInterestInput(event.target.value)
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          addInterest();
+                        }
+                      }}
+                      placeholder="Enter an interest"
+                    />
 
+                    <button
+                      type="button"
+                      className="mini-btn"
+                      onClick={addInterest}
+                    >
+                      Add
+                    </button>
+                  </div>
+
+                  <div
+                    className="member-tags"
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 8,
+                    }}
+                  >
+                    {(profile.interests || []).map((interest) => (
+                      <span
+                        key={interest}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                        }}
+                      >
+                        {interest}
+
+                        <button
+                          type="button"
+                          aria-label={`Remove ${interest}`}
+                          onClick={() => removeInterest(interest)}
+                          style={{
+                            border: 0,
+                            background: "transparent",
+                            cursor: "pointer",
+                            fontWeight: "bold",
+                            padding: 0,
+                          }}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* QUALIFICATIONS: add items individually */}
                   <label htmlFor="pf-qualifications">
-                    Qualifications (separate with commas)
+                    Qualifications
                   </label>
 
-                  <input
-                    id="pf-qualifications"
-                    value={(profile.qualifications || []).join(", ")}
-                    onChange={(event) =>
-                      setProfile({
-                        ...profile,
-                        qualifications: parseList(event.target.value),
-                      })
-                    }
-                    placeholder="BSc in Business, Project Management Certificate"
-                  />
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      alignItems: "stretch",
+                    }}
+                  >
+                    <input
+                      id="pf-qualifications"
+                      value={qualificationInput}
+                      onChange={(event) =>
+                        setQualificationInput(event.target.value)
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          addQualification();
+                        }
+                      }}
+                      placeholder="Enter a qualification"
+                    />
+
+                    <button
+                      type="button"
+                      className="mini-btn"
+                      onClick={addQualification}
+                    >
+                      Add
+                    </button>
+                  </div>
+
+                  <div
+                    className="member-tags"
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 8,
+                    }}
+                  >
+                    {(profile.qualifications || []).map(
+                      (qualification) => (
+                        <span
+                          key={qualification}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 6,
+                          }}
+                        >
+                          {qualification}
+
+                          <button
+                            type="button"
+                            aria-label={`Remove ${qualification}`}
+                            onClick={() =>
+                              removeQualification(qualification)
+                            }
+                            style={{
+                              border: 0,
+                              background: "transparent",
+                              cursor: "pointer",
+                              fontWeight: "bold",
+                              padding: 0,
+                            }}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      )
+                    )}
+                  </div>
 
                   <p className="panel-sub" style={{ marginTop: 0 }}>
                     Add degrees, certificates, professional training, or
@@ -868,6 +1060,7 @@ export default function Dashboard() {
                   <article className="member-row" key={member.id}>
                     <div className="member-info">
                       <strong>{member.full_name}</strong>
+
                       <small>
                         {member.role}
                         {member.company ? ` · ${member.company}` : ""}
