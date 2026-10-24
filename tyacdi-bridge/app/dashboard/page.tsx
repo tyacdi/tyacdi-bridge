@@ -49,6 +49,7 @@ export default function Dashboard() {
   const [roleFilter, setRoleFilter] = useState("All roles");
   const [saving, setSaving] = useState(false);
   const [workingRequest, setWorkingRequest] = useState("");
+  const [connectingTo, setConnectingTo] = useState<string[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -128,11 +129,23 @@ export default function Dashboard() {
 
         if (requestsError) throw requestsError;
 
+        const { data: sentRequests, error: sentError } =
+          await supabase
+            .from("connection_requests")
+            .select("to_user")
+            .eq("from_user", user.id)
+            .in("status", ["pending", "accepted"]);
+
+        if (sentError) throw sentError;
+
         if (!active) return;
 
         setProfile(currentProfile as Profile);
         setMembers((people || []) as Profile[]);
         setRequests((pendingRequests || []) as ConnectionRequest[]);
+        setConnectingTo(
+          (sentRequests || []).map((request) => request.to_user)
+        );
       } catch (err: unknown) {
         if (active) {
           setMessage(
@@ -189,6 +202,8 @@ export default function Dashboard() {
   }
 
   async function connect(toUser: string) {
+    if (!userId || connectingTo.includes(toUser)) return;
+
     setMessage("");
 
     try {
@@ -211,6 +226,7 @@ export default function Dashboard() {
         return;
       }
 
+      setConnectingTo((current) => [...current, toUser]);
       setMessage("Connection request sent.");
     } catch {
       setMessage("Could not send the request. Please try again.");
@@ -262,24 +278,96 @@ export default function Dashboard() {
     window.location.href = "/";
   }
 
+  const suggestedMembers = useMemo(() => {
+    if (!profile) return [];
+
+    const words = (value: string | null | undefined) =>
+      (value || "")
+        .toLowerCase()
+        .split(/[^a-z0-9+#]+/)
+        .filter((word) => word.length > 3);
+
+    const myInterests = new Set(
+      (profile.interests || []).map((item) =>
+        item.toLowerCase().trim()
+      )
+    );
+
+    const myGoalWords = new Set(words(profile.bio));
+
+    return members
+      .map((member) => {
+        const sharedInterests = (member.interests || []).filter(
+          (item) =>
+            myInterests.has(item.toLowerCase().trim())
+        );
+
+        const memberGoalWords = words(member.bio);
+
+        const sharedGoalWords = memberGoalWords.filter((word) =>
+          myGoalWords.has(word)
+        );
+
+        let score = 0;
+        const reasons: string[] = [];
+
+        if (member.role === "CEO / Executive") {
+          score += 5;
+          reasons.push("CEO / executive");
+        }
+
+        if (
+          profile.role &&
+          member.role?.toLowerCase() === profile.role.toLowerCase()
+        ) {
+          score += 3;
+          reasons.push("same role as you");
+        }
+
+        score += sharedInterests.length * 4;
+
+        if (sharedInterests.length > 0) {
+          reasons.push("shared interests");
+        }
+
+        score += Math.min(sharedGoalWords.length, 4);
+
+        if (sharedGoalWords.length >= 2) {
+          reasons.push("similar goals");
+        }
+
+        return {
+          member,
+          score,
+          reasons: reasons.slice(0, 3),
+        };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 6);
+  }, [members, profile]);
+
   const filteredMembers = useMemo(() => {
     const search = query.trim().toLowerCase();
 
     return members.filter((member) => {
+      const searchableValues = [
+        member.full_name,
+        member.company,
+        member.bio,
+        member.location,
+        member.role,
+        ...(member.interests || []),
+      ];
+
       const matchesSearch =
         !search ||
-        [
-          member.full_name,
-          member.company,
-          member.bio,
-          member.location,
-          ...(member.interests || []),
-        ].some((value) =>
+        searchableValues.some((value) =>
           (value || "").toLowerCase().includes(search)
         );
 
       const matchesRole =
-        roleFilter === "All roles" || member.role === roleFilter;
+        roleFilter === "All roles" ||
+        member.role === roleFilter;
 
       return matchesSearch && matchesRole;
     });
@@ -342,47 +430,235 @@ export default function Dashboard() {
         </nav>
       </header>
 
-      <div className="wrap dash-content">
-        <section className="dash-title">
-          <div>
-            <div className="eyebrow">MEMBER WORKSPACE</div>
+      <div className="wrap dashboard-content">
+        <section className="dash-hero">
+          <p className="eyebrow">YOUR PROFESSIONAL NETWORK</p>
 
-            <h1>
-              Good to see you,{" "}
-              {(profile?.full_name || "there").split(" ")[0]}.
-            </h1>
+          <h1>
+            Welcome back,{" "}
+            <span>{profile?.full_name || "Member"}</span>
+          </h1>
 
-            <p>Your network grows when you show up with intention.</p>
-          </div>
+          <p>
+            Learn from experience, build meaningful connections, and
+            grow with people who share your ambitions.
+          </p>
 
-          {/* Dashboard navigation buttons */}
           <div
             style={{
               display: "flex",
-              gap: 12,
               flexWrap: "wrap",
+              gap: 10,
+              marginTop: 20,
             }}
           >
-            <Link className="btn btn-dark" href="/messages">
-              Open messages
-            </Link>
+            <a className="btn btn-dark" href="#suggestions">
+              Discover people
+            </a>
 
-            {/* NEW: Find CEOs button */}
-            <Link className="btn btn-dark" href="/ceos">
-              Find CEOs
-            </Link>
-
-            <a className="btn btn-dark" href="#directory">
-              Discover members
+            <a className="btn btn-light" href="#directory">
+              Explore all members
             </a>
           </div>
         </section>
 
         {message && (
-          <div className="flash" role="status">
+          <div
+            role="status"
+            style={{
+              padding: "12px 16px",
+              marginBottom: 18,
+              borderRadius: 12,
+              background: "#edf6ee",
+              color: "#28583b",
+              overflowWrap: "anywhere",
+            }}
+          >
             {message}
           </div>
         )}
+
+        {/* PERSONALIZED MEMBER SUGGESTIONS */}
+        <section
+          className="dash-panel"
+          id="suggestions"
+          style={{ marginBottom: 22 }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              justifyContent: "space-between",
+              gap: 16,
+              flexWrap: "wrap",
+              marginBottom: 18,
+            }}
+          >
+            <div>
+              <p className="eyebrow">MADE FOR YOUR AMBITIONS</p>
+
+              <h2>People You Should Meet</h2>
+
+              <p className="panel-sub">
+                Discover CEOs, professionals in your field, and members
+                whose interests and ambitions may align with yours.
+              </p>
+            </div>
+
+            <a className="mini-btn" href="#directory">
+              View directory
+            </a>
+          </div>
+
+          {suggestedMembers.length === 0 ? (
+            <div className="empty-state">
+              There are no other member profiles to recommend yet.
+              As more people join TYACDI BRIDGE, recommendations will
+              appear here.
+            </div>
+          ) : (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "repeat(auto-fit, minmax(min(100%, 230px), 1fr))",
+                gap: 16,
+              }}
+            >
+              {suggestedMembers.map(
+                ({ member, reasons, score }) => (
+                  <article
+                    key={member.id}
+                    style={{
+                      border: "1px solid #e1e9df",
+                      borderRadius: 16,
+                      padding: 18,
+                      background:
+                        score >= 5
+                          ? "linear-gradient(145deg, #ffffff, #f0f7ef)"
+                          : "#ffffff",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-start",
+                      minWidth: 0,
+                    }}
+                  >
+                    <div
+                      className="portrait"
+                      aria-hidden="true"
+                      style={{ marginBottom: 12 }}
+                    >
+                      {(member.full_name || "Member")
+                        .split(" ")
+                        .map((part) => part[0])
+                        .slice(0, 2)
+                        .join("")
+                        .toUpperCase()}
+                    </div>
+
+                    <h3
+                      style={{
+                        fontSize: 17,
+                        margin: "0 0 5px",
+                        overflowWrap: "anywhere",
+                      }}
+                    >
+                      {member.full_name || "Member"}
+                    </h3>
+
+                    <p
+                      style={{
+                        color: "#54705b",
+                        fontSize: 13,
+                        margin: "0 0 8px",
+                      }}
+                    >
+                      {member.role || "Professional"}
+                    </p>
+
+                    {member.company && (
+                      <p
+                        style={{
+                          fontSize: 13,
+                          color: "#66736a",
+                          margin: "0 0 8px",
+                        }}
+                      >
+                        {member.company}
+                      </p>
+                    )}
+
+                    {member.location && (
+                      <p
+                        style={{
+                          fontSize: 12,
+                          color: "#758078",
+                          margin: "0 0 10px",
+                        }}
+                      >
+                        {member.location}
+                      </p>
+                    )}
+
+                    {member.bio && (
+                      <p
+                        style={{
+                          fontSize: 13,
+                          lineHeight: 1.6,
+                          color: "#526057",
+                          margin: "0 0 12px",
+                        }}
+                      >
+                        {member.bio.length > 115
+                          ? `${member.bio.slice(0, 115)}…`
+                          : member.bio}
+                      </p>
+                    )}
+
+                    {reasons.length > 0 && (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: 6,
+                          marginBottom: 14,
+                        }}
+                      >
+                        {reasons.map((reason) => (
+                          <span
+                            key={reason}
+                            style={{
+                              fontSize: 11,
+                              color: "#28583b",
+                              background: "#e4f0e5",
+                              borderRadius: 999,
+                              padding: "5px 8px",
+                            }}
+                          >
+                            {reason}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div style={{ marginTop: "auto", width: "100%" }}>
+                      <button
+                        className="mini-btn"
+                        type="button"
+                        disabled={connectingTo.includes(member.id)}
+                        onClick={() => connect(member.id)}
+                      >
+                        {connectingTo.includes(member.id)
+                          ? "Request sent"
+                          : "Connect"}
+                      </button>
+                    </div>
+                  </article>
+                )
+              )}
+            </div>
+          )}
+        </section>
 
         <div className="dash-grid">
           <section className="dash-panel" id="directory">
@@ -407,9 +683,7 @@ export default function Dashboard() {
               <select
                 aria-label="Filter by role"
                 value={roleFilter}
-                onChange={(event) =>
-                  setRoleFilter(event.target.value)
-                }
+                onChange={(event) => setRoleFilter(event.target.value)}
               >
                 <option>All roles</option>
 
@@ -462,9 +736,12 @@ export default function Dashboard() {
                     <button
                       className="mini-btn"
                       type="button"
+                      disabled={connectingTo.includes(member.id)}
                       onClick={() => connect(member.id)}
                     >
-                      Connect
+                      {connectingTo.includes(member.id)
+                        ? "Request sent"
+                        : "Connect"}
                     </button>
                   </div>
                 </article>
@@ -488,10 +765,7 @@ export default function Dashboard() {
               </p>
 
               {profile && (
-                <form
-                  className="profile-edit"
-                  onSubmit={saveProfile}
-                >
+                <form className="profile-edit" onSubmit={saveProfile}>
                   <label htmlFor="pf-name">Full name</label>
 
                   <input
@@ -553,7 +827,7 @@ export default function Dashboard() {
                     placeholder="City, country"
                   />
 
-                  <label htmlFor="pf-bio">Introduction</label>
+                  <label htmlFor="pf-bio">Introduction and goals</label>
 
                   <textarea
                     id="pf-bio"
@@ -565,7 +839,26 @@ export default function Dashboard() {
                         bio: event.target.value,
                       })
                     }
-                    placeholder="What are you working toward?"
+                    placeholder="Describe your ambitions, goals, and what you are building."
+                  />
+
+                  <label htmlFor="pf-interests">
+                    Interests (comma-separated)
+                  </label>
+
+                  <input
+                    id="pf-interests"
+                    value={(profile.interests || []).join(", ")}
+                    onChange={(event) =>
+                      setProfile({
+                        ...profile,
+                        interests: event.target.value
+                          .split(",")
+                          .map((item) => item.trim())
+                          .filter(Boolean),
+                      })
+                    }
+                    placeholder="Startups, technology, investing"
                   />
 
                   <button
