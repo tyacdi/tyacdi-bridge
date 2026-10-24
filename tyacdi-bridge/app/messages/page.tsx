@@ -42,6 +42,7 @@ export default function MessagesPage() {
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  // Load the logged-in user's accepted connections.
   useEffect(() => {
     let active = true;
 
@@ -117,10 +118,73 @@ export default function MessagesPage() {
     };
   }, []);
 
+  // Automatically scroll to the newest message.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // REAL-TIME MESSAGING:
+  // Receive messages from the other user without refreshing.
+  useEffect(() => {
+    if (!userId || !selected?.id) return;
+
+    const supabase = createClient();
+    const conversationId = selected.id;
+
+    const channel = supabase
+      .channel(`messages:${userId}:${conversationId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+        },
+        (payload) => {
+          const incoming = payload.new as Message;
+
+          const belongsToConversation =
+            (incoming.sender_id === userId &&
+              incoming.receiver_id === conversationId) ||
+            (incoming.sender_id === conversationId &&
+              incoming.receiver_id === userId);
+
+          if (!belongsToConversation) return;
+
+          setMessages((current) => {
+            // Prevent duplicate messages.
+            if (
+              current.some(
+                (message) => message.id === incoming.id
+              )
+            ) {
+              return current;
+            }
+
+            return [...current, incoming].sort(
+              (a, b) =>
+                new Date(a.created_at).getTime() -
+                new Date(b.created_at).getTime()
+            );
+          });
+
+          if (incoming.sender_id !== userId) {
+            setNotice(
+              `New message from ${
+                selected.full_name || "your connection"
+              }`
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [userId, selected?.id, selected?.full_name]);
+
+  // Open an existing conversation.
   async function openConversation(person: Profile) {
     setSelected(person);
     setMessages([]);
@@ -153,7 +217,10 @@ export default function MessagesPage() {
     }
   }
 
-  async function sendMessage(event: FormEvent<HTMLFormElement>) {
+  // Send a message.
+  async function sendMessage(
+    event: FormEvent<HTMLFormElement>
+  ) {
     event.preventDefault();
 
     const content = text.trim();
@@ -178,7 +245,14 @@ export default function MessagesPage() {
 
       if (error) throw error;
 
-      setMessages((current) => [...current, data as Message]);
+      setMessages((current) => {
+        if (current.some((message) => message.id === data.id)) {
+          return current;
+        }
+
+        return [...current, data as Message];
+      });
+
       setText("");
     } catch {
       setNotice(
@@ -189,6 +263,7 @@ export default function MessagesPage() {
     }
   }
 
+  // Search your connections by name.
   const filteredConnections = connections.filter((person) =>
     (person.full_name || "Member")
       .toLowerCase()
@@ -493,9 +568,12 @@ export default function MessagesPage() {
                 gap: 3,
               }}
             >
-              <strong style={{ fontSize: 14, letterSpacing: "0.04em" }}>
+              <strong
+                style={{ fontSize: 14, letterSpacing: "0.04em" }}
+              >
                 TYACDI BRIDGE
               </strong>
+
               <span
                 style={{
                   color: theme.muted,
@@ -676,6 +754,7 @@ export default function MessagesPage() {
               >
                 No accepted connections yet. Visit your dashboard to connect
                 with members and start a conversation.
+
                 <p style={{ margin: "12px 0 0" }}>
                   <Link
                     href="/dashboard"
@@ -755,7 +834,7 @@ export default function MessagesPage() {
             )}
           </aside>
 
-          {/* Conversation */}
+          {/* Conversation panel */}
           <section className="conversation-panel">
             {!selected ? (
               <div
@@ -881,6 +960,7 @@ export default function MessagesPage() {
                       >
                         Start a meaningful conversation.
                       </p>
+
                       <p
                         style={{
                           margin: 0,
@@ -947,14 +1027,18 @@ export default function MessagesPage() {
                     value={text}
                     onChange={(event) => setText(event.target.value)}
                     maxLength={5000}
-                    placeholder={`Message ${selected.full_name || "member"}...`}
+                    placeholder={`Message ${
+                      selected.full_name || "member"
+                    }...`}
                     aria-label="Message"
                     autoComplete="off"
                   />
 
                   <button
                     type="submit"
-                    disabled={!text.trim() || sending || loadingMessages}
+                    disabled={
+                      !text.trim() || sending || loadingMessages
+                    }
                     className="send-button"
                   >
                     {sending ? "Sending..." : "Send"}
