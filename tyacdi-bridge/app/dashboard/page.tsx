@@ -2,7 +2,12 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { createClient } from "@/lib/supabase/client";
 
 type Profile = {
@@ -54,20 +59,8 @@ const roles = [
   "Investor",
 ];
 
-function deleteButtonStyle(disabled: boolean) {
-  return {
-    display: "block",
-    width: "100%",
-    marginTop: 12,
-    padding: "12px 14px",
-    background: "#fff0ef",
-    color: "#a32121",
-    border: "1px solid #e5b4b4",
-    borderRadius: 8,
-    fontWeight: 600,
-    cursor: disabled ? "not-allowed" : "pointer",
-    opacity: disabled ? 0.6 : 1,
-  } as const;
+function normalize(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 function formatNotificationDate(value: string) {
@@ -81,20 +74,49 @@ function formatNotificationDate(value: string) {
   });
 }
 
+function initials(name: string) {
+  return (name || "Member")
+    .split(" ")
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
+function deleteButtonStyle(disabled: boolean) {
+  return {
+    display: "block",
+    width: "100%",
+    marginTop: 12,
+    padding: "12px 14px",
+    background: "#fff0ef",
+    color: "#a32121",
+    border: "1px solid #e5b4b4",
+    borderRadius: 10,
+    fontWeight: 600,
+    cursor: disabled ? "not-allowed" : "pointer",
+    opacity: disabled ? 0.6 : 1,
+  } as const;
+}
+
 export default function Dashboard() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [members, setMembers] = useState<Profile[]>([]);
   const [requests, setRequests] = useState<ConnectionRequest[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+
   const [userId, setUserId] = useState("");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("All roles");
+
   const [saving, setSaving] = useState(false);
   const [isEditingProfile, setIsEditingProfile] = useState(true);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [workingRequest, setWorkingRequest] = useState("");
+
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [markingAllRead, setMarkingAllRead] = useState(false);
   const [markingNotification, setMarkingNotification] = useState("");
@@ -103,30 +125,36 @@ export default function Dashboard() {
   const [qualificationInput, setQualificationInput] = useState("");
 
   const unreadCount = useMemo(
-    () => notifications.filter((notification) => !notification.is_read).length,
+    () =>
+      notifications.filter((notification) => !notification.is_read)
+        .length,
     [notifications]
   );
 
-  const loadNotifications = useCallback(async (currentUserId: string) => {
-    const supabase = createClient();
+  const loadNotifications = useCallback(
+    async (currentUserId: string) => {
+      const supabase = createClient();
 
-    const { data, error } = await supabase
-      .from("notifications")
-      .select(
-        "id,user_id,actor_id,type,title,body,link,is_read,created_at"
-      )
-      .eq("user_id", currentUserId)
-      .order("created_at", { ascending: false })
-      .limit(50);
+      const { data, error } = await supabase
+        .from("notifications")
+        .select(
+          "id,user_id,actor_id,type,title,body,link,is_read,created_at"
+        )
+        .eq("user_id", currentUserId)
+        .order("created_at", { ascending: false })
+        .limit(50);
 
-    if (error) {
-      console.error("Could not load notifications:", error.message);
-      return;
-    }
+      if (error) {
+        console.error("Could not load notifications:", error.message);
+        return;
+      }
 
-    setNotifications((data || []) as Notification[]);
-  }, []);
+      setNotifications((data || []) as Notification[]);
+    },
+    []
+  );
 
+  // Load the signed-in user's profile, directory and connection requests.
   useEffect(() => {
     let active = true;
 
@@ -232,7 +260,7 @@ export default function Dashboard() {
     };
   }, [loadNotifications]);
 
-  // Keep notifications updated while the dashboard is open.
+  // Update notifications in real time.
   useEffect(() => {
     if (!userId) return;
 
@@ -329,7 +357,7 @@ export default function Dashboard() {
 
     if (
       existing.some(
-        (item) => item.toLowerCase() === value.toLowerCase()
+        (item) => normalize(item) === normalize(value)
       )
     ) {
       setMessage("That interest has already been added.");
@@ -367,7 +395,7 @@ export default function Dashboard() {
 
     if (
       existing.some(
-        (item) => item.toLowerCase() === value.toLowerCase()
+        (item) => normalize(item) === normalize(value)
       )
     ) {
       setMessage("That qualification has already been added.");
@@ -395,6 +423,8 @@ export default function Dashboard() {
   }
 
   async function connect(toUser: string) {
+    if (!userId || toUser === userId) return;
+
     setMessage("");
 
     try {
@@ -461,7 +491,9 @@ export default function Dashboard() {
     }
   }
 
-  async function markNotificationRead(notification: Notification) {
+  async function markNotificationRead(
+    notification: Notification
+  ) {
     if (notification.is_read || markingNotification) return;
 
     setMarkingNotification(notification.id);
@@ -558,11 +590,11 @@ export default function Dashboard() {
       return;
     }
 
-    const finalConfirmation = window.confirm(
-      "Are you absolutely sure? Your account deletion cannot be undone."
-    );
-
-    if (!finalConfirmation) {
+    if (
+      !window.confirm(
+        "Are you absolutely sure? Your account deletion cannot be undone."
+      )
+    ) {
       setMessage("Account deletion cancelled.");
       return;
     }
@@ -608,8 +640,10 @@ export default function Dashboard() {
     window.location.replace("/");
   }
 
+  // Search names, roles, companies, bios, locations, interests
+  // and qualifications.
   const filteredMembers = useMemo(() => {
-    const search = query.trim().toLowerCase();
+    const search = normalize(query);
 
     return members.filter((member) => {
       const values = [
@@ -625,7 +659,7 @@ export default function Dashboard() {
       const matchesSearch =
         !search ||
         values.some((value) =>
-          (value || "").toLowerCase().includes(search)
+          normalize(value || "").includes(search)
         );
 
       const matchesRole =
@@ -635,30 +669,61 @@ export default function Dashboard() {
     });
   }, [members, query, roleFilter]);
 
+  // Recommend members using common interests, related interest wording,
+  // different professional roles and matching locations.
   const recommendations = useMemo(() => {
     if (!profile) return [];
 
-    const myInterests = (profile.interests || []).map((interest) =>
-      interest.toLowerCase()
-    );
+    const myInterests = (profile.interests || [])
+      .map(normalize)
+      .filter(Boolean);
 
-    return [...filteredMembers]
+    return members
+      .filter((member) => member.id !== profile.id)
       .map((member) => {
-        const sharedInterests = (member.interests || []).filter(
-          (interest) => myInterests.includes(interest.toLowerCase())
-        ).length;
+        const memberInterests = (member.interests || [])
+          .map(normalize)
+          .filter(Boolean);
+
+        const sharedInterests = memberInterests.filter((interest) =>
+          myInterests.includes(interest)
+        );
+
+        const similarInterests = memberInterests.filter((interest) => {
+          if (myInterests.includes(interest)) return false;
+
+          return myInterests.some((myInterest) => {
+            if (myInterest === interest) return false;
+
+            return (
+              myInterest.includes(interest) ||
+              interest.includes(myInterest)
+            );
+          });
+        });
+
+        const sameLocation =
+          !!profile.location &&
+          !!member.location &&
+          normalize(profile.location) === normalize(member.location);
+
+        const score =
+          sharedInterests.length * 4 +
+          similarInterests.length * 2 +
+          (member.role !== profile.role ? 1 : 0) +
+          (sameLocation ? 1 : 0);
 
         return {
           member,
-          score:
-            sharedInterests * 3 +
-            (member.role !== profile.role ? 1 : 0),
+          sharedInterests,
+          similarInterests,
+          score,
         };
       })
+      .filter((item) => item.score > 0)
       .sort((a, b) => b.score - a.score)
-      .slice(0, 3)
-      .map((item) => item.member);
-  }, [filteredMembers, profile]);
+      .slice(0, 4);
+  }, [members, profile]);
 
   if (loading) {
     return (
@@ -694,7 +759,9 @@ export default function Dashboard() {
           </Link>
 
           <div className="nav-actions">
-            <span>{profile?.full_name || "Member"}</span>
+            <span className="nav-name">
+              {profile?.full_name || "Member"}
+            </span>
 
             <div className="notification-wrapper">
               <button
@@ -710,7 +777,6 @@ export default function Dashboard() {
                   setNotificationsOpen((open) => !open)
                 }
               >
-                {/* Proper outlined notification bell */}
                 <span className="bell-icon" aria-hidden="true">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -854,58 +920,67 @@ export default function Dashboard() {
           <div
             role="status"
             aria-live="polite"
-            style={{
-              marginBottom: 20,
-              padding: 14,
-              borderRadius: 8,
-              background: "#f0f7f1",
-              color: "#254d34",
-              overflowWrap: "anywhere",
-            }}
+            className="status-message"
           >
             {message}
           </div>
         )}
 
-        <div
-          className="dashboard-grid"
-          style={{
-            display: "grid",
-            gridTemplateColumns:
-              "minmax(0, 1.5fr) minmax(280px, 1fr)",
-            gap: 24,
-            alignItems: "start",
-          }}
-        >
+        <div className="dashboard-grid">
           <section className="dash-panel" id="directory">
             <h2>Member directory</h2>
 
             <p className="panel-sub">
-              Search entrepreneurs, mentors, executives, and other
-              members of the community.
+              Discover entrepreneurs, mentors, CEOs, executives and
+              professionals in the TYACDI BRIDGE community.
             </p>
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns:
-                  "minmax(0, 1fr) minmax(130px, 0.6fr)",
-                gap: 10,
-                marginBottom: 20,
-              }}
-            >
-              <input
-                type="search"
-                aria-label="Search members"
-                placeholder="Search members or qualifications..."
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-              />
+            <div className="directory-controls">
+              <div className="member-search">
+                <svg
+                  className="search-icon"
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="m20 20-4-4" />
+                </svg>
+
+                <input
+                  type="search"
+                  aria-label="Search members"
+                  placeholder="Search by name, CEO, company, interests..."
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+
+                {query && (
+                  <button
+                    type="button"
+                    className="clear-search"
+                    aria-label="Clear search"
+                    onClick={() => setQuery("")}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
 
               <select
+                className="role-filter"
                 aria-label="Filter members by role"
                 value={roleFilter}
-                onChange={(event) => setRoleFilter(event.target.value)}
+                onChange={(event) =>
+                  setRoleFilter(event.target.value)
+                }
               >
                 <option>All roles</option>
 
@@ -915,18 +990,20 @@ export default function Dashboard() {
               </select>
             </div>
 
+            <p className="results-count">
+              {filteredMembers.length}{" "}
+              {filteredMembers.length === 1 ? "member" : "members"} found
+            </p>
+
             {filteredMembers.length === 0 ? (
-              <p>No members found. Try another search.</p>
+              <p className="empty-state">
+                No members found. Try another name, interest or role.
+              </p>
             ) : (
               filteredMembers.map((member) => (
                 <article className="member-row" key={member.id}>
                   <div className="portrait">
-                    {(member.full_name || "Member")
-                      .split(" ")
-                      .map((part) => part[0])
-                      .slice(0, 2)
-                      .join("")
-                      .toUpperCase()}
+                    {initials(member.full_name)}
                   </div>
 
                   <div className="member-info">
@@ -949,11 +1026,9 @@ export default function Dashboard() {
                     )}
 
                     {!!member.qualifications?.length && (
-                      <div style={{ marginTop: 8 }}>
-                        <small>
-                          <strong>Qualifications:</strong>{" "}
-                          {member.qualifications.join(" · ")}
-                        </small>
+                      <div className="qualifications-preview">
+                        <strong>Qualifications:</strong>{" "}
+                        {member.qualifications.join(" · ")}
                       </div>
                     )}
                   </div>
@@ -972,18 +1047,12 @@ export default function Dashboard() {
             )}
           </section>
 
-          <aside
-            style={{
-              display: "grid",
-              gap: 18,
-              alignContent: "start",
-            }}
-          >
+          <aside className="dashboard-sidebar">
             <section className="dash-panel">
               <h2>Your profile</h2>
 
               <p className="panel-sub">
-                Manage your information, interests, qualifications, and
+                Manage your information, interests, qualifications and
                 account settings.
               </p>
 
@@ -991,12 +1060,7 @@ export default function Dashboard() {
                 <div>
                   <div className="member-row">
                     <div className="portrait">
-                      {(profile.full_name || "Member")
-                        .split(" ")
-                        .map((part) => part[0])
-                        .slice(0, 2)
-                        .join("")
-                        .toUpperCase()}
+                      {initials(profile.full_name)}
                     </div>
 
                     <div className="member-info">
@@ -1014,11 +1078,11 @@ export default function Dashboard() {
                   </div>
 
                   {profile.bio && (
-                    <p style={{ lineHeight: 1.6 }}>{profile.bio}</p>
+                    <p className="profile-bio">{profile.bio}</p>
                   )}
 
                   {!!profile.interests?.length && (
-                    <div style={{ marginTop: 12 }}>
+                    <div className="profile-detail">
                       <strong>Interests</strong>
 
                       <div className="member-tags">
@@ -1030,7 +1094,7 @@ export default function Dashboard() {
                   )}
 
                   {!!profile.qualifications?.length && (
-                    <div style={{ marginTop: 14 }}>
+                    <div className="profile-detail">
                       <strong>Qualifications</strong>
 
                       <div className="member-tags">
@@ -1044,9 +1108,8 @@ export default function Dashboard() {
                   )}
 
                   <button
-                    className="btn btn-dark"
+                    className="btn btn-dark full-width"
                     type="button"
-                    style={{ marginTop: 16, width: "100%" }}
                     onClick={() => {
                       setMessage("");
                       setIsEditingProfile(true);
@@ -1071,7 +1134,7 @@ export default function Dashboard() {
               {profile && isEditingProfile && (
                 <form
                   onSubmit={saveProfile}
-                  style={{ display: "grid", gap: 10 }}
+                  className="profile-form"
                 >
                   <label htmlFor="pf-name">Full name</label>
 
@@ -1104,7 +1167,9 @@ export default function Dashboard() {
                     ))}
                   </select>
 
-                  <label htmlFor="pf-company">Company / project</label>
+                  <label htmlFor="pf-company">
+                    Company / project
+                  </label>
 
                   <input
                     id="pf-company"
@@ -1237,13 +1302,13 @@ export default function Dashboard() {
                     )}
                   </div>
 
-                  <p className="panel-sub" style={{ marginTop: 0 }}>
-                    Add degrees, certificates, professional training, or
+                  <p className="panel-sub">
+                    Add degrees, certificates, professional training or
                     relevant industry credentials.
                   </p>
 
                   <button
-                    className="btn btn-dark"
+                    className="btn btn-dark full-width"
                     type="submit"
                     disabled={saving || deletingAccount}
                   >
@@ -1264,7 +1329,7 @@ export default function Dashboard() {
                   </button>
 
                   <button
-                    className="mini-btn"
+                    className="mini-btn cancel-edit"
                     type="button"
                     disabled={saving || deletingAccount}
                     onClick={() => {
@@ -1282,32 +1347,89 @@ export default function Dashboard() {
               <h2>People you should meet</h2>
 
               <p className="panel-sub">
-                Members whose interests may align with yours.
+                People are suggested based on common interests, related
+                interests and professional relevance.
               </p>
 
               {recommendations.length === 0 ? (
-                <p>No recommendations available yet.</p>
+                <p className="empty-state">
+                  No recommendations yet. Add interests to your profile
+                  to help us find relevant people.
+                </p>
               ) : (
-                recommendations.map((member) => (
-                  <article className="member-row" key={member.id}>
-                    <div className="member-info">
-                      <strong>{member.full_name}</strong>
-
-                      <small>
-                        {member.role}
-                        {member.company ? ` · ${member.company}` : ""}
-                      </small>
-                    </div>
-
-                    <button
-                      className="mini-btn"
-                      type="button"
-                      onClick={() => connect(member.id)}
+                recommendations.map(
+                  ({ member, sharedInterests, similarInterests }) => (
+                    <article
+                      className="recommendation-card"
+                      key={member.id}
                     >
-                      Connect
-                    </button>
-                  </article>
-                ))
+                      <div className="portrait small-portrait">
+                        {initials(member.full_name)}
+                      </div>
+
+                      <div className="member-info">
+                        <strong>{member.full_name}</strong>
+
+                        <small>
+                          {member.role}
+                          {member.company ? ` · ${member.company}` : ""}
+                        </small>
+
+                        {member.location && (
+                          <small>{member.location}</small>
+                        )}
+
+                        {sharedInterests.length > 0 && (
+                          <div className="match-note">
+                            <strong>Common interests</strong>
+
+                            <div className="match-tags">
+                              {sharedInterests.slice(0, 3).map(
+                                (interest) => (
+                                  <span key={interest}>
+                                    {interest}
+                                  </span>
+                                )
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {sharedInterests.length === 0 &&
+                          similarInterests.length > 0 && (
+                            <div className="match-note">
+                              <strong>Related interests</strong>
+
+                              <div className="match-tags">
+                                {similarInterests.slice(0, 3).map(
+                                  (interest) => (
+                                    <span key={interest}>
+                                      {interest}
+                                    </span>
+                                  )
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                        {sharedInterests.length === 0 &&
+                          similarInterests.length === 0 && (
+                            <small className="match-note">
+                              Suggested based on your professional profile
+                            </small>
+                          )}
+
+                        <button
+                          className="mini-btn recommendation-connect"
+                          type="button"
+                          onClick={() => connect(member.id)}
+                        >
+                          Connect
+                        </button>
+                      </div>
+                    </article>
+                  )
+                )
               )}
             </section>
 
@@ -1319,7 +1441,9 @@ export default function Dashboard() {
               </p>
 
               {requests.length === 0 ? (
-                <p>No pending connection requests.</p>
+                <p className="empty-state">
+                  No pending connection requests.
+                </p>
               ) : (
                 requests.map((request) => (
                   <article className="member-row" key={request.id}>
@@ -1336,21 +1460,25 @@ export default function Dashboard() {
                       </small>
                     </div>
 
-                    <div className="member-actions">
+                    <div className="request-actions">
                       <button
                         className="mini-btn"
                         type="button"
                         disabled={workingRequest === request.id}
-                        onClick={() => respond(request.id, "accepted")}
+                        onClick={() =>
+                          respond(request.id, "accepted")
+                        }
                       >
                         Accept
                       </button>
 
                       <button
-                        className="mini-btn"
+                        className="mini-btn decline-btn"
                         type="button"
                         disabled={workingRequest === request.id}
-                        onClick={() => respond(request.id, "declined")}
+                        onClick={() =>
+                          respond(request.id, "declined")
+                        }
                       >
                         Decline
                       </button>
@@ -1365,10 +1493,253 @@ export default function Dashboard() {
 
       <footer className="wrap dash-footer">
         TYACDI BRIDGE · Learn. Build. Grow.
-        <span className="footer-right">Be respectful. Build trust.</span>
+        <span className="footer-right">
+          Be respectful. Build trust.
+        </span>
       </footer>
 
       <style jsx>{`
+        .dashboard-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr);
+          gap: 24px;
+          align-items: start;
+        }
+
+        .dashboard-sidebar {
+          display: grid;
+          gap: 18px;
+          align-content: start;
+          min-width: 0;
+        }
+
+        .status-message {
+          margin-bottom: 20px;
+          padding: 14px 16px;
+          border: 1px solid #d1e8d7;
+          border-radius: 12px;
+          background: #f0f7f1;
+          color: #254d34;
+          overflow-wrap: anywhere;
+        }
+
+        .directory-controls {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(130px, 0.45fr);
+          gap: 10px;
+          margin: 20px 0 10px;
+        }
+
+        .member-search {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          min-width: 0;
+          padding: 0 13px;
+          border: 1px solid #cbd5e1;
+          border-radius: 14px;
+          background: linear-gradient(
+            135deg,
+            #ffffff 0%,
+            #f5f8ff 100%
+          );
+          box-shadow: 0 4px 14px rgba(20, 42, 78, 0.06);
+          transition:
+            border-color 0.2s ease,
+            box-shadow 0.2s ease,
+            background 0.2s ease;
+        }
+
+        .member-search:focus-within {
+          border-color: #3269b2;
+          background: #ffffff;
+          box-shadow: 0 0 0 4px rgba(50, 105, 178, 0.12);
+        }
+
+        .search-icon {
+          flex-shrink: 0;
+          color: #60718b;
+        }
+
+        .member-search input {
+          width: 100%;
+          min-width: 0;
+          padding: 14px 0;
+          border: 0;
+          outline: none;
+          background: transparent;
+          color: #172033;
+          font: inherit;
+          box-shadow: none;
+        }
+
+        .member-search input:focus {
+          outline: none;
+          box-shadow: none;
+        }
+
+        .member-search input::placeholder {
+          color: #8290a5;
+        }
+
+        .clear-search {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          width: 28px;
+          height: 28px;
+          border: 0;
+          border-radius: 50%;
+          background: #e8eef7;
+          color: #34445c;
+          font-size: 20px;
+          cursor: pointer;
+        }
+
+        .clear-search:hover {
+          background: #d8e4f5;
+        }
+
+        .role-filter {
+          min-width: 0;
+          border-radius: 12px;
+        }
+
+        .results-count {
+          margin: 8px 0 16px;
+          color: #718096;
+          font-size: 12px;
+        }
+
+        .empty-state {
+          color: #718096;
+          font-size: 13px;
+          line-height: 1.6;
+        }
+
+        .qualifications-preview {
+          margin-top: 8px;
+          color: #657084;
+          font-size: 12px;
+          line-height: 1.6;
+        }
+
+        .qualifications-preview strong {
+          color: #34445c;
+        }
+
+        .profile-bio {
+          margin: 12px 0;
+          line-height: 1.7;
+        }
+
+        .profile-detail {
+          display: grid;
+          gap: 8px;
+          margin-top: 14px;
+        }
+
+        .full-width {
+          width: 100%;
+          margin-top: 16px;
+        }
+
+        .profile-form {
+          display: grid;
+          gap: 10px;
+        }
+
+        .tag-input-row {
+          display: flex;
+          gap: 8px;
+          align-items: stretch;
+        }
+
+        .tag-input-row input {
+          min-width: 0;
+          flex: 1;
+        }
+
+        .editable-tags {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        .editable-tags span {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .editable-tags button {
+          padding: 0;
+          border: 0;
+          background: transparent;
+          font-weight: bold;
+          cursor: pointer;
+        }
+
+        .cancel-edit {
+          margin-top: 4px;
+        }
+
+        .recommendation-card {
+          display: flex;
+          align-items: flex-start;
+          gap: 10px;
+          padding: 14px 0;
+          border-bottom: 1px solid #edf0f4;
+        }
+
+        .small-portrait {
+          width: 38px;
+          height: 38px;
+          flex-shrink: 0;
+          font-size: 12px;
+        }
+
+        .match-note {
+          display: grid;
+          gap: 6px;
+          margin-top: 8px;
+          color: #41608b;
+          font-size: 12px;
+        }
+
+        .match-tags {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 5px;
+        }
+
+        .match-tags span {
+          padding: 4px 8px;
+          border: 1px solid #d6e4f8;
+          border-radius: 999px;
+          background: #eef5ff;
+          color: #244f83;
+          font-size: 11px;
+          font-weight: 600;
+        }
+
+        .recommendation-connect {
+          margin-top: 10px;
+        }
+
+        .request-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+        }
+
+        .decline-btn {
+          background: #fff0ef;
+          color: #a32121;
+          border-color: #e5b4b4;
+        }
+
         .notification-wrapper {
           position: relative;
         }
@@ -1390,8 +1761,7 @@ export default function Dashboard() {
           cursor: pointer;
           transition:
             background 0.2s ease,
-            border-color 0.2s ease,
-            transform 0.2s ease;
+            border-color 0.2s ease;
         }
 
         .notification-bell:hover {
@@ -1550,39 +1920,17 @@ export default function Dashboard() {
           line-height: 1.6;
         }
 
-        .tag-input-row {
-          display: flex;
-          gap: 8px;
-          align-items: stretch;
-        }
-
-        .editable-tags {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-        }
-
-        .editable-tags span {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-        }
-
-        .editable-tags button {
-          padding: 0;
-          border: 0;
-          background: transparent;
-          font-weight: bold;
-          cursor: pointer;
-        }
-
         .footer-right {
           float: right;
         }
 
         @media (max-width: 760px) {
           .dashboard-grid {
-            grid-template-columns: minmax(0, 1fr) !important;
+            grid-template-columns: minmax(0, 1fr);
+          }
+
+          .directory-controls {
+            grid-template-columns: minmax(0, 1fr);
           }
 
           .nav-actions {
@@ -1590,6 +1938,13 @@ export default function Dashboard() {
             flex-wrap: wrap;
             align-items: center;
             gap: 8px;
+          }
+
+          .nav-name {
+            max-width: 120px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
           }
 
           .bell-label {
@@ -1603,10 +1958,37 @@ export default function Dashboard() {
             max-height: min(75vh, 500px);
           }
 
+          .member-row {
+            flex-wrap: wrap;
+          }
+
+          .member-info {
+            min-width: 0;
+            overflow-wrap: anywhere;
+          }
+
+          .member-actions {
+            margin-left: auto;
+          }
+
           .footer-right {
             float: none;
             display: block;
             margin-top: 8px;
+          }
+        }
+
+        @media (max-width: 420px) {
+          .notification-bell {
+            padding: 9px;
+          }
+
+          .recommendation-card {
+            gap: 8px;
+          }
+
+          .request-actions {
+            width: 100%;
           }
         }
       `}</style>
