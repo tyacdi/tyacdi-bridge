@@ -48,8 +48,8 @@ export default function Dashboard() {
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("All roles");
   const [saving, setSaving] = useState(false);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [workingRequest, setWorkingRequest] = useState("");
-  const [connectingTo, setConnectingTo] = useState<string[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -129,23 +129,11 @@ export default function Dashboard() {
 
         if (requestsError) throw requestsError;
 
-        const { data: sentRequests, error: sentError } =
-          await supabase
-            .from("connection_requests")
-            .select("to_user")
-            .eq("from_user", user.id)
-            .in("status", ["pending", "accepted"]);
-
-        if (sentError) throw sentError;
-
         if (!active) return;
 
         setProfile(currentProfile as Profile);
         setMembers((people || []) as Profile[]);
         setRequests((pendingRequests || []) as ConnectionRequest[]);
-        setConnectingTo(
-          (sentRequests || []).map((request) => request.to_user)
-        );
       } catch (err: unknown) {
         if (active) {
           setMessage(
@@ -169,7 +157,7 @@ export default function Dashboard() {
   async function saveProfile(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
-    if (!profile) return;
+    if (!profile || saving) return;
 
     setSaving(true);
     setMessage("");
@@ -177,24 +165,38 @@ export default function Dashboard() {
     try {
       const supabase = createClient();
 
-      const { error } = await supabase.from("profiles").upsert({
-        id: userId,
-        full_name: profile.full_name,
-        role: profile.role,
-        company: profile.company,
-        bio: profile.bio,
-        location: profile.location,
-        interests: profile.interests || [],
-      });
+      const { data: savedProfile, error } = await supabase
+        .from("profiles")
+        .upsert(
+          {
+            id: userId,
+            full_name: profile.full_name.trim(),
+            role: profile.role,
+            company: profile.company?.trim() || null,
+            bio: profile.bio?.trim() || null,
+            location: profile.location?.trim() || null,
+            interests: profile.interests || [],
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "id" }
+        )
+        .select("*")
+        .single();
 
       if (error) throw error;
 
+      if (!savedProfile) {
+        throw new Error("The profile was not returned after saving.");
+      }
+
+      setProfile(savedProfile as Profile);
+      setIsEditingProfile(false);
       setMessage("Profile saved successfully.");
     } catch (err: unknown) {
       setMessage(
         err instanceof Error
-          ? err.message
-          : "Could not save your profile."
+          ? `Profile could not be saved: ${err.message}`
+          : "Profile could not be saved. Please try again."
       );
     } finally {
       setSaving(false);
@@ -202,8 +204,6 @@ export default function Dashboard() {
   }
 
   async function connect(toUser: string) {
-    if (!userId || connectingTo.includes(toUser)) return;
-
     setMessage("");
 
     try {
@@ -226,7 +226,6 @@ export default function Dashboard() {
         return;
       }
 
-      setConnectingTo((current) => [...current, toUser]);
       setMessage("Connection request sent.");
     } catch {
       setMessage("Could not send the request. Please try again.");
@@ -278,6 +277,32 @@ export default function Dashboard() {
     window.location.href = "/";
   }
 
+  const filteredMembers = useMemo(() => {
+    const search = query.trim().toLowerCase();
+
+    return members.filter((member) => {
+      const searchableValues = [
+        member.full_name,
+        member.company,
+        member.bio,
+        member.location,
+        member.role,
+        ...(member.interests || []),
+      ];
+
+      const matchesSearch =
+        !search ||
+        searchableValues.some((value) =>
+          (value || "").toLowerCase().includes(search)
+        );
+
+      const matchesRole =
+        roleFilter === "All roles" || member.role === roleFilter;
+
+      return matchesSearch && matchesRole;
+    });
+  }, [members, query, roleFilter]);
+
   const suggestedMembers = useMemo(() => {
     if (!profile) return [];
 
@@ -298,8 +323,7 @@ export default function Dashboard() {
     return members
       .map((member) => {
         const sharedInterests = (member.interests || []).filter(
-          (item) =>
-            myInterests.has(item.toLowerCase().trim())
+          (item) => myInterests.has(item.toLowerCase().trim())
         );
 
         const memberGoalWords = words(member.bio);
@@ -339,39 +363,12 @@ export default function Dashboard() {
         return {
           member,
           score,
-          reasons: reasons.slice(0, 3),
+          reasons: reasons.slice(0, 2),
         };
       })
       .sort((a, b) => b.score - a.score)
       .slice(0, 6);
   }, [members, profile]);
-
-  const filteredMembers = useMemo(() => {
-    const search = query.trim().toLowerCase();
-
-    return members.filter((member) => {
-      const searchableValues = [
-        member.full_name,
-        member.company,
-        member.bio,
-        member.location,
-        member.role,
-        ...(member.interests || []),
-      ];
-
-      const matchesSearch =
-        !search ||
-        searchableValues.some((value) =>
-          (value || "").toLowerCase().includes(search)
-        );
-
-      const matchesRole =
-        roleFilter === "All roles" ||
-        member.role === roleFilter;
-
-      return matchesSearch && matchesRole;
-    });
-  }, [members, query, roleFilter]);
 
   if (loading) {
     return (
@@ -430,124 +427,117 @@ export default function Dashboard() {
         </nav>
       </header>
 
-      <div className="wrap dashboard-content">
-        <section className="dash-hero">
-          <p className="eyebrow">YOUR PROFESSIONAL NETWORK</p>
+      <div className="wrap dash-content">
+        <section className="dash-title">
+          <div>
+            <div className="eyebrow">MEMBER WORKSPACE</div>
 
-          <h1>
-            Welcome back,{" "}
-            <span>{profile?.full_name || "Member"}</span>
-          </h1>
+            <h1>
+              Good to see you,{" "}
+              {(profile?.full_name || "there").split(" ")[0]}.
+            </h1>
 
-          <p>
-            Learn from experience, build meaningful connections, and
-            grow with people who share your ambitions.
-          </p>
+            <p>
+              Your network grows when you show up with intention.
+            </p>
+          </div>
 
           <div
             style={{
               display: "flex",
+              gap: 12,
               flexWrap: "wrap",
-              gap: 10,
-              marginTop: 20,
             }}
           >
-            <a className="btn btn-dark" href="#suggestions">
-              Discover people
-            </a>
+            <Link className="btn btn-dark" href="/messages">
+              Open messages
+            </Link>
 
-            <a className="btn btn-light" href="#directory">
-              Explore all members
+            <Link className="btn btn-dark" href="/ceos">
+              Find CEOs
+            </Link>
+
+            <a className="btn btn-dark" href="#directory">
+              Discover members
             </a>
           </div>
         </section>
 
         {message && (
-          <div
-            role="status"
-            style={{
-              padding: "12px 16px",
-              marginBottom: 18,
-              borderRadius: 12,
-              background: "#edf6ee",
-              color: "#28583b",
-              overflowWrap: "anywhere",
-            }}
-          >
+          <div className="flash" role="status">
             {message}
           </div>
         )}
 
-        {/* PERSONALIZED MEMBER SUGGESTIONS */}
+        {/* PEOPLE YOU SHOULD MEET */}
         <section
           className="dash-panel"
-          id="suggestions"
           style={{ marginBottom: 22 }}
         >
           <div
             style={{
               display: "flex",
-              alignItems: "flex-start",
               justifyContent: "space-between",
+              alignItems: "flex-start",
               gap: 16,
               flexWrap: "wrap",
-              marginBottom: 18,
+              marginBottom: 16,
             }}
           >
             <div>
-              <p className="eyebrow">MADE FOR YOUR AMBITIONS</p>
+              <div className="eyebrow">RECOMMENDED FOR YOU</div>
 
-              <h2>People You Should Meet</h2>
+              <h2 style={{ marginTop: 6 }}>
+                People you should meet
+              </h2>
 
-              <p className="panel-sub">
-                Discover CEOs, professionals in your field, and members
-                whose interests and ambitions may align with yours.
+              <p className="panel-sub" style={{ marginBottom: 0 }}>
+                Discover CEOs, people in your role, and members with
+                interests or ambitions similar to yours.
               </p>
             </div>
 
-            <a className="mini-btn" href="#directory">
-              View directory
-            </a>
+            <Link className="mini-btn" href="/ceos">
+              Explore CEOs
+            </Link>
           </div>
 
           {suggestedMembers.length === 0 ? (
             <div className="empty-state">
-              There are no other member profiles to recommend yet.
-              As more people join TYACDI BRIDGE, recommendations will
-              appear here.
+              We will recommend people as more members join. Add details
+              about your goals and interests to your profile to improve
+              suggestions.
             </div>
           ) : (
             <div
               style={{
                 display: "grid",
                 gridTemplateColumns:
-                  "repeat(auto-fit, minmax(min(100%, 230px), 1fr))",
-                gap: 16,
+                  "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
+                gap: 14,
               }}
             >
-              {suggestedMembers.map(
-                ({ member, reasons, score }) => (
-                  <article
-                    key={member.id}
+              {suggestedMembers.map(({ member, reasons }) => (
+                <article
+                  key={member.id}
+                  style={{
+                    border: "1px solid #e1e9e2",
+                    borderRadius: 16,
+                    padding: 16,
+                    background:
+                      "linear-gradient(145deg, #ffffff, #f5f8f3)",
+                    minWidth: 0,
+                  }}
+                >
+                  <div
                     style={{
-                      border: "1px solid #e1e9df",
-                      borderRadius: 16,
-                      padding: 18,
-                      background:
-                        score >= 5
-                          ? "linear-gradient(145deg, #ffffff, #f0f7ef)"
-                          : "#ffffff",
                       display: "flex",
-                      flexDirection: "column",
-                      alignItems: "flex-start",
-                      minWidth: 0,
+                      alignItems: "center",
+                      gap: 11,
+                      marginBottom: 12,
                     }}
                   >
-                    <div
-                      className="portrait"
-                      aria-hidden="true"
-                      style={{ marginBottom: 12 }}
-                    >
+                    <div className="portrait" aria-hidden="true">
                       {(member.full_name || "Member")
                         .split(" ")
                         .map((part) => part[0])
@@ -556,111 +546,91 @@ export default function Dashboard() {
                         .toUpperCase()}
                     </div>
 
-                    <h3
-                      style={{
-                        fontSize: 17,
-                        margin: "0 0 5px",
-                        overflowWrap: "anywhere",
-                      }}
+                    <div
+                      className="member-info"
+                      style={{ minWidth: 0 }}
                     >
-                      {member.full_name || "Member"}
-                    </h3>
+                      <strong>
+                        {member.full_name || "Member"}
+                      </strong>
 
+                      <small>
+                        {member.role}
+                        {member.company
+                          ? ` · ${member.company}`
+                          : ""}
+                      </small>
+                    </div>
+                  </div>
+
+                  {member.location && (
                     <p
                       style={{
-                        color: "#54705b",
-                        fontSize: 13,
+                        fontSize: 12,
+                        color: "#647368",
                         margin: "0 0 8px",
                       }}
                     >
-                      {member.role || "Professional"}
+                      {member.location}
                     </p>
+                  )}
 
-                    {member.company && (
-                      <p
-                        style={{
-                          fontSize: 13,
-                          color: "#66736a",
-                          margin: "0 0 8px",
-                        }}
-                      >
-                        {member.company}
-                      </p>
-                    )}
+                  {member.bio && (
+                    <p
+                      style={{
+                        fontSize: 13,
+                        lineHeight: 1.5,
+                        color: "#536258",
+                        margin: "0 0 10px",
+                      }}
+                    >
+                      {member.bio.length > 115
+                        ? `${member.bio.slice(0, 115)}…`
+                        : member.bio}
+                    </p>
+                  )}
 
-                    {member.location && (
-                      <p
-                        style={{
-                          fontSize: 12,
-                          color: "#758078",
-                          margin: "0 0 10px",
-                        }}
-                      >
-                        {member.location}
-                      </p>
-                    )}
-
-                    {member.bio && (
-                      <p
-                        style={{
-                          fontSize: 13,
-                          lineHeight: 1.6,
-                          color: "#526057",
-                          margin: "0 0 12px",
-                        }}
-                      >
-                        {member.bio.length > 115
-                          ? `${member.bio.slice(0, 115)}…`
-                          : member.bio}
-                      </p>
-                    )}
-
-                    {reasons.length > 0 && (
-                      <div
-                        style={{
-                          display: "flex",
-                          flexWrap: "wrap",
-                          gap: 6,
-                          marginBottom: 14,
-                        }}
-                      >
-                        {reasons.map((reason) => (
-                          <span
-                            key={reason}
-                            style={{
-                              fontSize: 11,
-                              color: "#28583b",
-                              background: "#e4f0e5",
-                              borderRadius: 999,
-                              padding: "5px 8px",
-                            }}
-                          >
-                            {reason}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    <div style={{ marginTop: "auto", width: "100%" }}>
-                      <button
-                        className="mini-btn"
-                        type="button"
-                        disabled={connectingTo.includes(member.id)}
-                        onClick={() => connect(member.id)}
-                      >
-                        {connectingTo.includes(member.id)
-                          ? "Request sent"
-                          : "Connect"}
-                      </button>
+                  {reasons.length > 0 && (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: 6,
+                        marginBottom: 12,
+                      }}
+                    >
+                      {reasons.map((reason) => (
+                        <span
+                          key={reason}
+                          style={{
+                            fontSize: 11,
+                            color: "#28583b",
+                            background: "#e4f0e5",
+                            borderRadius: 999,
+                            padding: "5px 8px",
+                          }}
+                        >
+                          {reason}
+                        </span>
+                      ))}
                     </div>
-                  </article>
-                )
-              )}
+                  )}
+
+                  <button
+                    className="mini-btn"
+                    type="button"
+                    onClick={() => connect(member.id)}
+                  >
+                    Connect
+                  </button>
+                </article>
+              ))}
             </div>
           )}
         </section>
 
         <div className="dash-grid">
+          {/* MEMBER DIRECTORY */}
           <section className="dash-panel" id="directory">
             <h2>Discover your network</h2>
 
@@ -683,7 +653,9 @@ export default function Dashboard() {
               <select
                 aria-label="Filter by role"
                 value={roleFilter}
-                onChange={(event) => setRoleFilter(event.target.value)}
+                onChange={(event) =>
+                  setRoleFilter(event.target.value)
+                }
               >
                 <option>All roles</option>
 
@@ -711,12 +683,18 @@ export default function Dashboard() {
                   </div>
 
                   <div className="member-info">
-                    <strong>{member.full_name || "Member"}</strong>
+                    <strong>
+                      {member.full_name || "Member"}
+                    </strong>
 
                     <small>
                       {member.role}
-                      {member.company ? ` · ${member.company}` : ""}
-                      {member.location ? ` · ${member.location}` : ""}
+                      {member.company
+                        ? ` · ${member.company}`
+                        : ""}
+                      {member.location
+                        ? ` · ${member.location}`
+                        : ""}
                     </small>
 
                     {member.bio && <small>{member.bio}</small>}
@@ -736,12 +714,9 @@ export default function Dashboard() {
                     <button
                       className="mini-btn"
                       type="button"
-                      disabled={connectingTo.includes(member.id)}
                       onClick={() => connect(member.id)}
                     >
-                      {connectingTo.includes(member.id)
-                        ? "Request sent"
-                        : "Connect"}
+                      Connect
                     </button>
                   </div>
                 </article>
@@ -756,7 +731,8 @@ export default function Dashboard() {
               alignContent: "start",
             }}
           >
-            <section className="dash-panel">
+            {/* PROFILE SECTION */}
+            <section className="dash-panel" id="profile">
               <h2>Your profile</h2>
 
               <p className="panel-sub">
@@ -764,8 +740,83 @@ export default function Dashboard() {
                 are building.
               </p>
 
-              {profile && (
-                <form className="profile-edit" onSubmit={saveProfile}>
+              {profile && !isEditingProfile && (
+                <div className="profile-summary">
+                  <div
+                    className="member-row"
+                    style={{
+                      paddingLeft: 0,
+                      paddingRight: 0,
+                    }}
+                  >
+                    <div className="portrait" aria-hidden="true">
+                      {(profile.full_name || "Member")
+                        .split(" ")
+                        .map((part) => part[0])
+                        .slice(0, 2)
+                        .join("")
+                        .toUpperCase()}
+                    </div>
+
+                    <div className="member-info">
+                      <strong>
+                        {profile.full_name || "Member"}
+                      </strong>
+
+                      <small>
+                        {profile.role || "Professional"}
+                      </small>
+
+                      {profile.company && (
+                        <small>{profile.company}</small>
+                      )}
+
+                      {profile.location && (
+                        <small>{profile.location}</small>
+                      )}
+                    </div>
+                  </div>
+
+                  {profile.bio && (
+                    <p
+                      style={{
+                        whiteSpace: "pre-wrap",
+                        lineHeight: 1.6,
+                      }}
+                    >
+                      {profile.bio}
+                    </p>
+                  )}
+
+                  {!!profile.interests?.length && (
+                    <div
+                      className="member-tags"
+                      style={{ marginBottom: 16 }}
+                    >
+                      {profile.interests.map((interest) => (
+                        <span key={interest}>{interest}</span>
+                      ))}
+                    </div>
+                  )}
+
+                  <button
+                    className="btn btn-dark"
+                    type="button"
+                    onClick={() => {
+                      setMessage("");
+                      setIsEditingProfile(true);
+                    }}
+                  >
+                    Edit profile
+                  </button>
+                </div>
+              )}
+
+              {profile && isEditingProfile && (
+                <form
+                  className="profile-edit"
+                  onSubmit={saveProfile}
+                >
                   <label htmlFor="pf-name">Full name</label>
 
                   <input
@@ -792,9 +843,11 @@ export default function Dashboard() {
                       })
                     }
                   >
-                    {roles.map((role) => (
-                      <option key={role}>{role}</option>
-                    ))}
+                    {roles
+                      .filter((role) => role !== "Mentor")
+                      .map((role) => (
+                        <option key={role}>{role}</option>
+                      ))}
                   </select>
 
                   <label htmlFor="pf-company">
@@ -827,11 +880,13 @@ export default function Dashboard() {
                     placeholder="City, country"
                   />
 
-                  <label htmlFor="pf-bio">Introduction and goals</label>
+                  <label htmlFor="pf-bio">
+                    Introduction and goals
+                  </label>
 
                   <textarea
                     id="pf-bio"
-                    rows={3}
+                    rows={4}
                     value={profile.bio || ""}
                     onChange={(event) =>
                       setProfile({
@@ -861,17 +916,40 @@ export default function Dashboard() {
                     placeholder="Startups, technology, investing"
                   />
 
-                  <button
-                    className="btn btn-dark"
-                    type="submit"
-                    disabled={saving}
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 10,
+                    }}
                   >
-                    {saving ? "Saving profile..." : "Save profile"}
-                  </button>
+                    <button
+                      className="btn btn-dark"
+                      type="submit"
+                      disabled={saving}
+                    >
+                      {saving
+                        ? "Saving profile..."
+                        : "Save profile"}
+                    </button>
+
+                    <button
+                      className="mini-btn"
+                      type="button"
+                      disabled={saving}
+                      onClick={() => {
+                        setMessage("");
+                        setIsEditingProfile(false);
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </form>
               )}
             </section>
 
+            {/* CONNECTION REQUESTS */}
             <section className="dash-panel">
               <h2>Connection requests</h2>
 
@@ -886,7 +964,10 @@ export default function Dashboard() {
                 </div>
               ) : (
                 requests.map((request) => (
-                  <article className="member-row" key={request.id}>
+                  <article
+                    className="member-row"
+                    key={request.id}
+                  >
                     <div className="member-info">
                       <strong>
                         {request.profiles?.full_name || "Member"}
@@ -933,6 +1014,7 @@ export default function Dashboard() {
 
       <footer className="wrap dash-footer">
         TYACDI BRIDGE · Learn. Build. Grow.
+
         <span style={{ float: "right" }}>
           Be respectful. Build trust.
         </span>
