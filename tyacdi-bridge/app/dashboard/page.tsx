@@ -13,6 +13,7 @@ type Profile = {
   bio: string | null;
   location: string | null;
   interests: string[] | null;
+  qualifications: string[] | null;
 };
 
 type ConnectionRequest = {
@@ -37,6 +38,33 @@ const roles = [
   "Student / Emerging talent",
   "Investor",
 ];
+
+function parseList(value: string): string[] {
+  return Array.from(
+    new Set(
+      value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+function deleteButtonStyle(disabled: boolean) {
+  return {
+    display: "block",
+    width: "100%",
+    marginTop: 12,
+    padding: "12px 14px",
+    background: "#fff0ef",
+    color: "#a32121",
+    border: "1px solid #e5b4b4",
+    borderRadius: 8,
+    fontWeight: 600,
+    cursor: disabled ? "not-allowed" : "pointer",
+    opacity: disabled ? 0.6 : 1,
+  } as const;
+}
 
 export default function Dashboard() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -99,6 +127,7 @@ export default function Dashboard() {
                 bio: metadata.bio || null,
                 location: null,
                 interests: [],
+                qualifications: [],
               })
               .select("*")
               .single();
@@ -178,6 +207,7 @@ export default function Dashboard() {
             bio: profile.bio?.trim() || null,
             location: profile.location?.trim() || null,
             interests: profile.interests || [],
+            qualifications: profile.qualifications || [],
             updated_at: new Date().toISOString(),
           },
           { onConflict: "id" }
@@ -268,12 +298,11 @@ export default function Dashboard() {
     }
   }
 
-  // DELETE ACCOUNT
   async function deleteAccount() {
     if (deletingAccount) return;
 
     const confirmation = window.prompt(
-      'To permanently delete your account, type DELETE in capital letters:'
+      "To permanently delete your account, type DELETE in capital letters:"
     );
 
     if (confirmation === null) {
@@ -283,7 +312,7 @@ export default function Dashboard() {
 
     if (confirmation.trim() !== "DELETE") {
       setMessage(
-        'Confirmation did not match. Type DELETE in capital letters to try again.'
+        'Confirmation did not match. Type "DELETE" in capital letters.'
       );
       return;
     }
@@ -349,6 +378,7 @@ export default function Dashboard() {
         member.bio,
         member.location,
         ...(member.interests || []),
+        ...(member.qualifications || []),
       ];
 
       const matchesSearch =
@@ -505,7 +535,7 @@ export default function Dashboard() {
               <input
                 type="search"
                 aria-label="Search members"
-                placeholder="Search members..."
+                placeholder="Search members or qualifications..."
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
@@ -513,9 +543,7 @@ export default function Dashboard() {
               <select
                 aria-label="Filter members by role"
                 value={roleFilter}
-                onChange={(event) =>
-                  setRoleFilter(event.target.value)
-                }
+                onChange={(event) => setRoleFilter(event.target.value)}
               >
                 <option>All roles</option>
 
@@ -557,6 +585,15 @@ export default function Dashboard() {
                         ))}
                       </div>
                     )}
+
+                    {!!member.qualifications?.length && (
+                      <div style={{ marginTop: 8 }}>
+                        <small>
+                          <strong>Qualifications:</strong>{" "}
+                          {member.qualifications.join(" · ")}
+                        </small>
+                      </div>
+                    )}
                   </div>
 
                   <div className="member-actions">
@@ -580,12 +617,12 @@ export default function Dashboard() {
               alignContent: "start",
             }}
           >
-            {/* PROFILE SECTION */}
             <section className="dash-panel">
               <h2>Your profile</h2>
 
               <p className="panel-sub">
-                Manage your information and account settings.
+                Manage your information, interests, qualifications, and
+                account settings.
               </p>
 
               {profile && !isEditingProfile && (
@@ -615,16 +652,28 @@ export default function Dashboard() {
                   </div>
 
                   {profile.bio && (
-                    <p style={{ lineHeight: 1.6 }}>
-                      {profile.bio}
-                    </p>
+                    <p style={{ lineHeight: 1.6 }}>{profile.bio}</p>
                   )}
 
                   {!!profile.interests?.length && (
-                    <div className="member-tags">
-                      {profile.interests.map((interest) => (
-                        <span key={interest}>{interest}</span>
-                      ))}
+                    <div style={{ marginTop: 12 }}>
+                      <strong>Interests</strong>
+                      <div className="member-tags">
+                        {profile.interests.map((interest) => (
+                          <span key={interest}>{interest}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {!!profile.qualifications?.length && (
+                    <div style={{ marginTop: 14 }}>
+                      <strong>Qualifications</strong>
+                      <div className="member-tags">
+                        {profile.qualifications.map((qualification) => (
+                          <span key={qualification}>{qualification}</span>
+                        ))}
+                      </div>
                     </div>
                   )}
 
@@ -656,10 +705,7 @@ export default function Dashboard() {
               {profile && isEditingProfile && (
                 <form
                   onSubmit={saveProfile}
-                  style={{
-                    display: "grid",
-                    gap: 10,
-                  }}
+                  style={{ display: "grid", gap: 10 }}
                 >
                   <label htmlFor="pf-name">Full name</label>
 
@@ -745,14 +791,32 @@ export default function Dashboard() {
                     onChange={(event) =>
                       setProfile({
                         ...profile,
-                        interests: event.target.value
-                          .split(",")
-                          .map((item) => item.trim())
-                          .filter(Boolean),
+                        interests: parseList(event.target.value),
                       })
                     }
                     placeholder="Startups, technology, investing"
                   />
+
+                  <label htmlFor="pf-qualifications">
+                    Qualifications (separate with commas)
+                  </label>
+
+                  <input
+                    id="pf-qualifications"
+                    value={(profile.qualifications || []).join(", ")}
+                    onChange={(event) =>
+                      setProfile({
+                        ...profile,
+                        qualifications: parseList(event.target.value),
+                      })
+                    }
+                    placeholder="BSc in Business, Project Management Certificate"
+                  />
+
+                  <p className="panel-sub" style={{ marginTop: 0 }}>
+                    Add degrees, certificates, professional training, or
+                    relevant industry credentials.
+                  </p>
 
                   <button
                     className="btn btn-dark"
@@ -790,7 +854,6 @@ export default function Dashboard() {
               )}
             </section>
 
-            {/* RECOMMENDATIONS */}
             <section className="dash-panel">
               <h2>People you should meet</h2>
 
@@ -823,7 +886,6 @@ export default function Dashboard() {
               )}
             </section>
 
-            {/* CONNECTION REQUESTS */}
             <section className="dash-panel">
               <h2>Connection requests</h2>
 
@@ -854,9 +916,7 @@ export default function Dashboard() {
                         className="mini-btn"
                         type="button"
                         disabled={workingRequest === request.id}
-                        onClick={() =>
-                          respond(request.id, "accepted")
-                        }
+                        onClick={() => respond(request.id, "accepted")}
                       >
                         Accept
                       </button>
@@ -865,9 +925,7 @@ export default function Dashboard() {
                         className="mini-btn"
                         type="button"
                         disabled={workingRequest === request.id}
-                        onClick={() =>
-                          respond(request.id, "declined")
-                        }
+                        onClick={() => respond(request.id, "declined")}
                       >
                         Decline
                       </button>
@@ -902,20 +960,4 @@ export default function Dashboard() {
       `}</style>
     </main>
   );
-}
-
-function deleteButtonStyle(disabled: boolean) {
-  return {
-    display: "block",
-    width: "100%",
-    marginTop: 12,
-    padding: "12px 14px",
-    background: "#fff0ef",
-    color: "#a32121",
-    border: "1px solid #e5b4b4",
-    borderRadius: 8,
-    fontWeight: 600,
-    cursor: disabled ? "not-allowed" : "pointer",
-    opacity: disabled ? 0.6 : 1,
-  } as const;
 }
