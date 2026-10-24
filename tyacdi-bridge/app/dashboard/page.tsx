@@ -258,7 +258,6 @@ export default function Dashboard() {
         }
       });
 
-    // Refresh periodically as a fallback.
     const interval = window.setInterval(() => {
       void loadNotifications(userId);
     }, 30000);
@@ -711,7 +710,24 @@ export default function Dashboard() {
                   setNotificationsOpen((open) => !open)
                 }
               >
-                <span aria-hidden="true">♧</span>
+                {/* Proper outlined notification bell */}
+                <span className="bell-icon" aria-hidden="true">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="21"
+                    height="21"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+                    <path d="M10 21h4" />
+                  </svg>
+                </span>
+
                 <span className="bell-label">Notifications</span>
 
                 {unreadCount > 0 && (
@@ -1362,20 +1378,37 @@ export default function Dashboard() {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          gap: 7px;
-          min-height: 40px;
-          padding: 9px 12px;
+          gap: 8px;
+          min-height: 42px;
+          padding: 9px 13px;
           border: 1px solid #d7dce3;
-          border-radius: 9px;
+          border-radius: 10px;
           background: #fff;
           color: #172033;
           font: inherit;
           font-weight: 600;
           cursor: pointer;
+          transition:
+            background 0.2s ease,
+            border-color 0.2s ease,
+            transform 0.2s ease;
         }
 
         .notification-bell:hover {
-          background: #f5f7fa;
+          background: #f0f5fc;
+          border-color: #9aafce;
+        }
+
+        .notification-bell:focus-visible {
+          outline: 2px solid #3269b2;
+          outline-offset: 3px;
+        }
+
+        .bell-icon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
         }
 
         .notification-count {
@@ -1385,6 +1418,7 @@ export default function Dashboard() {
           min-width: 20px;
           height: 20px;
           padding: 0 5px;
+          border: 2px solid #fff;
           border-radius: 999px;
           background: #bd3030;
           color: #fff;
