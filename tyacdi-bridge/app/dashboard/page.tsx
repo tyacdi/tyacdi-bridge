@@ -55,19 +55,19 @@ export default function Dashboard() {
   useEffect(() => {
     let active = true;
 
-    async function load() {
+    async function loadDashboard() {
       try {
         const supabase = createClient();
 
-        const { data: authData, error: authError } =
-          await supabase.auth.getUser();
+        const {
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser();
 
-        if (authError || !authData.user) {
-          window.location.href = "/login";
+        if (authError || !user) {
+          window.location.replace("/login");
           return;
         }
-
-        const user = authData.user;
 
         if (!active) return;
 
@@ -85,22 +85,21 @@ export default function Dashboard() {
         if (!currentProfile) {
           const metadata = user.user_metadata || {};
 
-          const seed = {
-            id: user.id,
-            full_name:
-              metadata.full_name ||
-              user.email?.split("@")[0] ||
-              "Member",
-            role: metadata.role || "Professional",
-            company: metadata.company || "",
-            bio: metadata.bio || "",
-            interests: [],
-          };
-
           const { data: createdProfile, error: createError } =
             await supabase
               .from("profiles")
-              .upsert(seed)
+              .upsert({
+                id: user.id,
+                full_name:
+                  metadata.full_name ||
+                  user.email?.split("@")[0] ||
+                  "Member",
+                role: metadata.role || "Professional",
+                company: metadata.company || null,
+                bio: metadata.bio || null,
+                location: null,
+                interests: [],
+              })
               .select("*")
               .single();
 
@@ -135,12 +134,12 @@ export default function Dashboard() {
         setProfile(currentProfile as Profile);
         setMembers((people || []) as Profile[]);
         setRequests((pendingRequests || []) as ConnectionRequest[]);
-      } catch (err: unknown) {
+      } catch (error: unknown) {
         if (active) {
           setMessage(
-            err instanceof Error
-              ? err.message
-              : "Could not load your dashboard. Please refresh and try again."
+            error instanceof Error
+              ? error.message
+              : "Could not load your dashboard."
           );
         }
       } finally {
@@ -148,17 +147,19 @@ export default function Dashboard() {
       }
     }
 
-    load();
+    loadDashboard();
 
     return () => {
       active = false;
     };
   }, []);
 
-  async function saveProfile(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function saveProfile(
+    event: React.FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault();
 
-    if (!profile) return;
+    if (!profile || saving) return;
 
     setSaving(true);
     setMessage("");
@@ -166,7 +167,7 @@ export default function Dashboard() {
     try {
       const supabase = createClient();
 
-      const { data: savedProfile, error } = await supabase
+      const { data, error } = await supabase
         .from("profiles")
         .upsert(
           {
@@ -186,17 +187,13 @@ export default function Dashboard() {
 
       if (error) throw error;
 
-      if (!savedProfile) {
-        throw new Error("The profile was not returned after saving.");
-      }
-
-      setProfile(savedProfile as Profile);
+      setProfile(data as Profile);
       setIsEditingProfile(false);
-      setMessage("Profile saved successfully.");
-    } catch (err: unknown) {
+      setMessage("Your profile has been saved.");
+    } catch (error: unknown) {
       setMessage(
-        err instanceof Error
-          ? err.message
+        error instanceof Error
+          ? error.message
           : "Could not save your profile."
       );
     } finally {
@@ -229,7 +226,7 @@ export default function Dashboard() {
 
       setMessage("Connection request sent.");
     } catch {
-      setMessage("Could not send the request. Please try again.");
+      setMessage("Could not send the connection request.");
     }
   }
 
@@ -246,7 +243,8 @@ export default function Dashboard() {
       const { error } = await supabase
         .from("connection_requests")
         .update({ status })
-        .eq("id", id);
+        .eq("id", id)
+        .eq("to_user", userId);
 
       if (error) throw error;
 
@@ -259,31 +257,45 @@ export default function Dashboard() {
           ? "Connection accepted."
           : "Request declined."
       );
-    } catch (err: unknown) {
+    } catch (error: unknown) {
       setMessage(
-        err instanceof Error
-          ? err.message
-          : "Could not update the request."
+        error instanceof Error
+          ? error.message
+          : "Could not update the connection request."
       );
     } finally {
       setWorkingRequest("");
     }
   }
 
+  // DELETE ACCOUNT
   async function deleteAccount() {
     if (deletingAccount) return;
 
     const confirmation = window.prompt(
-      'This permanently deletes your account. Type DELETE to confirm.'
+      'To permanently delete your account, type DELETE in capital letters:'
     );
 
-    if (confirmation !== "DELETE") return;
+    if (confirmation === null) {
+      setMessage("Account deletion cancelled.");
+      return;
+    }
+
+    if (confirmation.trim() !== "DELETE") {
+      setMessage(
+        'Confirmation did not match. Type DELETE in capital letters to try again.'
+      );
+      return;
+    }
 
     const finalConfirmation = window.confirm(
-      "Are you absolutely sure? Your account and associated profile will be permanently deleted. This cannot be undone."
+      "Are you absolutely sure? Your account deletion cannot be undone."
     );
 
-    if (!finalConfirmation) return;
+    if (!finalConfirmation) {
+      setMessage("Account deletion cancelled.");
+      return;
+    }
 
     setDeletingAccount(true);
     setMessage("Deleting your account...");
@@ -291,13 +303,17 @@ export default function Dashboard() {
     try {
       const response = await fetch("/api/account/delete", {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
       });
 
-      const result = await response.json();
+      const result = await response.json().catch(() => null);
 
       if (!response.ok) {
         throw new Error(
-          result.error || "Account deletion failed."
+          result?.error ||
+            `Account deletion failed. Server returned ${response.status}.`
         );
       }
 
@@ -305,11 +321,11 @@ export default function Dashboard() {
       await supabase.auth.signOut();
 
       window.location.replace("/");
-    } catch (err: unknown) {
+    } catch (error: unknown) {
       setMessage(
-        err instanceof Error
-          ? err.message
-          : "Could not delete your account. Please try again."
+        error instanceof Error
+          ? error.message
+          : "Account deletion failed. Please try again."
       );
 
       setDeletingAccount(false);
@@ -318,25 +334,26 @@ export default function Dashboard() {
 
   async function logout() {
     const supabase = createClient();
-
     await supabase.auth.signOut();
-
-    window.location.href = "/";
+    window.location.replace("/");
   }
 
   const filteredMembers = useMemo(() => {
     const search = query.trim().toLowerCase();
 
     return members.filter((member) => {
+      const values = [
+        member.full_name,
+        member.role,
+        member.company,
+        member.bio,
+        member.location,
+        ...(member.interests || []),
+      ];
+
       const matchesSearch =
         !search ||
-        [
-          member.full_name,
-          member.company,
-          member.bio,
-          member.location,
-          ...(member.interests || []),
-        ].some((value) =>
+        values.some((value) =>
           (value || "").toLowerCase().includes(search)
         );
 
@@ -347,11 +364,36 @@ export default function Dashboard() {
     });
   }, [members, query, roleFilter]);
 
+  const recommendations = useMemo(() => {
+    if (!profile) return [];
+
+    const myInterests = (profile.interests || []).map((interest) =>
+      interest.toLowerCase()
+    );
+
+    return [...filteredMembers]
+      .map((member) => {
+        const sharedInterests = (member.interests || []).filter(
+          (interest) => myInterests.includes(interest.toLowerCase())
+        ).length;
+
+        return {
+          member,
+          score:
+            sharedInterests * 3 +
+            (member.role !== profile.role ? 1 : 0),
+        };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3)
+      .map((item) => item.member);
+  }, [filteredMembers, profile]);
+
   if (loading) {
     return (
       <main className="auth-main">
         <div className="auth-form">
-          <p>Loading your member workspace...</p>
+          <p>Loading your TYACDI BRIDGE dashboard...</p>
         </div>
       </main>
     );
@@ -381,9 +423,7 @@ export default function Dashboard() {
           </Link>
 
           <div className="nav-actions">
-            <span style={{ fontSize: 12, color: "#6c7b70" }}>
-              {profile?.full_name || "Member"}
-            </span>
+            <span>{profile?.full_name || "Member"}</span>
 
             <Link
               href="/messages"
@@ -405,69 +445,73 @@ export default function Dashboard() {
       </header>
 
       <div className="wrap dash-content">
-        <section className="dash-title">
-          <div>
-            <div className="eyebrow">MEMBER WORKSPACE</div>
+        <section className="dash-heading">
+          <p className="eyebrow">YOUR TYACDI BRIDGE WORKSPACE</p>
 
-            <h1>
-              Good to see you,{" "}
-              {(profile?.full_name || "there").split(" ")[0]}.
-            </h1>
+          <h1>
+            Welcome back, {profile?.full_name || "Member"}.
+          </h1>
 
-            <p>
-              Your network grows when you show up with intention.
-            </p>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              gap: 12,
-              flexWrap: "wrap",
-            }}
-          >
-            <Link className="btn btn-dark" href="/messages">
-              Open messages
-            </Link>
-
-            <Link className="btn btn-dark" href="/ceos">
-              Find CEOs
-            </Link>
-
-            <a className="btn btn-dark" href="#directory">
-              Discover members
-            </a>
-          </div>
+          <p>
+            Meet ambitious people, connect with experienced leaders,
+            and keep building your future.
+          </p>
         </section>
 
         {message && (
-          <div className="flash" role="status" aria-live="polite">
+          <div
+            role="status"
+            aria-live="polite"
+            style={{
+              marginBottom: 20,
+              padding: 14,
+              borderRadius: 8,
+              background: "#f0f7f1",
+              color: "#254d34",
+              overflowWrap: "anywhere",
+            }}
+          >
             {message}
           </div>
         )}
 
-        <div className="dash-grid">
+        <div
+          className="dashboard-grid"
+          style={{
+            display: "grid",
+            gridTemplateColumns:
+              "minmax(0, 1.5fr) minmax(280px, 1fr)",
+            gap: 24,
+            alignItems: "start",
+          }}
+        >
           <section className="dash-panel" id="directory">
-            <h2>Discover your network</h2>
+            <h2>Member directory</h2>
 
             <p className="panel-sub">
-              Find people with shared ambitions and send a request to
-              connect.
+              Search entrepreneurs, mentors, executives, and other
+              members of the community.
             </p>
 
             <div
-              className="form-row"
-              style={{ marginBottom: 14 }}
+              style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "minmax(0, 1fr) minmax(130px, 0.6fr)",
+                gap: 10,
+                marginBottom: 20,
+              }}
             >
               <input
+                type="search"
                 aria-label="Search members"
-                placeholder="Search name, company, bio, or interests..."
+                placeholder="Search members..."
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
 
               <select
-                aria-label="Filter by role"
+                aria-label="Filter members by role"
                 value={roleFilter}
                 onChange={(event) =>
                   setRoleFilter(event.target.value)
@@ -482,14 +526,11 @@ export default function Dashboard() {
             </div>
 
             {filteredMembers.length === 0 ? (
-              <div className="empty-state">
-                No members match this search yet. Invite others to join
-                and grow the community.
-              </div>
+              <p>No members found. Try another search.</p>
             ) : (
               filteredMembers.map((member) => (
                 <article className="member-row" key={member.id}>
-                  <div className="portrait" aria-hidden="true">
+                  <div className="portrait">
                     {(member.full_name || "Member")
                       .split(" ")
                       .map((part) => part[0])
@@ -502,7 +543,7 @@ export default function Dashboard() {
                     <strong>{member.full_name || "Member"}</strong>
 
                     <small>
-                      {member.role}
+                      {member.role || "Professional"}
                       {member.company ? ` · ${member.company}` : ""}
                       {member.location ? ` · ${member.location}` : ""}
                     </small>
@@ -511,11 +552,9 @@ export default function Dashboard() {
 
                     {!!member.interests?.length && (
                       <div className="member-tags">
-                        {member.interests
-                          .slice(0, 4)
-                          .map((interest) => (
-                            <span key={interest}>{interest}</span>
-                          ))}
+                        {member.interests.slice(0, 4).map((interest) => (
+                          <span key={interest}>{interest}</span>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -541,24 +580,18 @@ export default function Dashboard() {
               alignContent: "start",
             }}
           >
+            {/* PROFILE SECTION */}
             <section className="dash-panel">
               <h2>Your profile</h2>
 
               <p className="panel-sub">
-                Help other members understand who you are and what you
-                are building.
+                Manage your information and account settings.
               </p>
 
               {profile && !isEditingProfile && (
-                <div className="profile-summary">
-                  <div
-                    className="member-row"
-                    style={{
-                      paddingLeft: 0,
-                      paddingRight: 0,
-                    }}
-                  >
-                    <div className="portrait" aria-hidden="true">
+                <div>
+                  <div className="member-row">
+                    <div className="portrait">
                       {(profile.full_name || "Member")
                         .split(" ")
                         .map((part) => part[0])
@@ -568,31 +601,27 @@ export default function Dashboard() {
                     </div>
 
                     <div className="member-info">
-                      <strong>
-                        {profile.full_name || "Member"}
-                      </strong>
-                      <small>{profile.role || "Professional"}</small>
-                      {profile.company && <small>{profile.company}</small>}
-                      {profile.location && <small>{profile.location}</small>}
+                      <strong>{profile.full_name}</strong>
+                      <small>{profile.role}</small>
+
+                      {profile.company && (
+                        <small>{profile.company}</small>
+                      )}
+
+                      {profile.location && (
+                        <small>{profile.location}</small>
+                      )}
                     </div>
                   </div>
 
                   {profile.bio && (
-                    <p
-                      style={{
-                        whiteSpace: "pre-wrap",
-                        lineHeight: 1.6,
-                      }}
-                    >
+                    <p style={{ lineHeight: 1.6 }}>
                       {profile.bio}
                     </p>
                   )}
 
                   {!!profile.interests?.length && (
-                    <div
-                      className="member-tags"
-                      style={{ marginBottom: 16 }}
-                    >
+                    <div className="member-tags">
                       {profile.interests.map((interest) => (
                         <span key={interest}>{interest}</span>
                       ))}
@@ -602,6 +631,7 @@ export default function Dashboard() {
                   <button
                     className="btn btn-dark"
                     type="button"
+                    style={{ marginTop: 16, width: "100%" }}
                     onClick={() => {
                       setMessage("");
                       setIsEditingProfile(true);
@@ -614,19 +644,7 @@ export default function Dashboard() {
                     type="button"
                     onClick={deleteAccount}
                     disabled={deletingAccount}
-                    style={{
-                      display: "block",
-                      width: "100%",
-                      marginTop: 12,
-                      padding: "12px 14px",
-                      background: "#fff0ef",
-                      color: "#a32121",
-                      border: "1px solid #e5b4b4",
-                      borderRadius: 8,
-                      fontWeight: 600,
-                      cursor: deletingAccount ? "wait" : "pointer",
-                      opacity: deletingAccount ? 0.6 : 1,
-                    }}
+                    style={deleteButtonStyle(deletingAccount)}
                   >
                     {deletingAccount
                       ? "Deleting account..."
@@ -637,8 +655,11 @@ export default function Dashboard() {
 
               {profile && isEditingProfile && (
                 <form
-                  className="profile-edit"
                   onSubmit={saveProfile}
+                  style={{
+                    display: "grid",
+                    gap: 10,
+                  }}
                 >
                   <label htmlFor="pf-name">Full name</label>
 
@@ -671,9 +692,7 @@ export default function Dashboard() {
                     ))}
                   </select>
 
-                  <label htmlFor="pf-company">
-                    Company / project
-                  </label>
+                  <label htmlFor="pf-company">Company / project</label>
 
                   <input
                     id="pf-company"
@@ -717,7 +736,7 @@ export default function Dashboard() {
                   />
 
                   <label htmlFor="pf-interests">
-                    Interests (comma-separated)
+                    Interests (separate with commas)
                   </label>
 
                   <input
@@ -738,31 +757,18 @@ export default function Dashboard() {
                   <button
                     className="btn btn-dark"
                     type="submit"
-                    disabled={saving}
+                    disabled={saving || deletingAccount}
                   >
-                    {saving ? "Saving profile..." : "Save profile"}
+                    {saving ? "Saving..." : "Save profile"}
                   </button>
 
                   <button
                     type="button"
                     onClick={deleteAccount}
                     disabled={deletingAccount || saving}
-                    style={{
-                      display: "block",
-                      width: "100%",
-                      marginTop: 12,
-                      padding: "12px 14px",
-                      background: "#fff0ef",
-                      color: "#a32121",
-                      border: "1px solid #e5b4b4",
-                      borderRadius: 8,
-                      fontWeight: 600,
-                      cursor:
-                        deletingAccount || saving
-                          ? "not-allowed"
-                          : "pointer",
-                      opacity: deletingAccount ? 0.6 : 1,
-                    }}
+                    style={deleteButtonStyle(
+                      deletingAccount || saving
+                    )}
                   >
                     {deletingAccount
                       ? "Deleting account..."
@@ -772,31 +778,61 @@ export default function Dashboard() {
                   <button
                     className="mini-btn"
                     type="button"
-                    disabled={saving}
+                    disabled={saving || deletingAccount}
                     onClick={() => {
                       setMessage("");
                       setIsEditingProfile(false);
                     }}
-                    style={{ marginTop: 10 }}
                   >
-                    Cancel
+                    Cancel editing
                   </button>
                 </form>
               )}
             </section>
 
+            {/* RECOMMENDATIONS */}
+            <section className="dash-panel">
+              <h2>People you should meet</h2>
+
+              <p className="panel-sub">
+                Members whose interests may align with yours.
+              </p>
+
+              {recommendations.length === 0 ? (
+                <p>No recommendations available yet.</p>
+              ) : (
+                recommendations.map((member) => (
+                  <article className="member-row" key={member.id}>
+                    <div className="member-info">
+                      <strong>{member.full_name}</strong>
+                      <small>
+                        {member.role}
+                        {member.company ? ` · ${member.company}` : ""}
+                      </small>
+                    </div>
+
+                    <button
+                      className="mini-btn"
+                      type="button"
+                      onClick={() => connect(member.id)}
+                    >
+                      Connect
+                    </button>
+                  </article>
+                ))
+              )}
+            </section>
+
+            {/* CONNECTION REQUESTS */}
             <section className="dash-panel">
               <h2>Connection requests</h2>
 
               <p className="panel-sub">
-                Review people who have asked to connect with you.
+                Review people who want to connect with you.
               </p>
 
               {requests.length === 0 ? (
-                <div className="empty-state">
-                  No pending requests right now. Keep exploring the
-                  directory to build your network.
-                </div>
+                <p>No pending connection requests.</p>
               ) : (
                 requests.map((request) => (
                   <article className="member-row" key={request.id}>
@@ -822,9 +858,7 @@ export default function Dashboard() {
                           respond(request.id, "accepted")
                         }
                       >
-                        {workingRequest === request.id
-                          ? "Updating..."
-                          : "Accept"}
+                        Accept
                       </button>
 
                       <button
@@ -852,6 +886,36 @@ export default function Dashboard() {
           Be respectful. Build trust.
         </span>
       </footer>
+
+      <style jsx>{`
+        @media (max-width: 760px) {
+          .dashboard-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+
+          .nav-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+          }
+        }
+      `}</style>
     </main>
   );
+}
+
+function deleteButtonStyle(disabled: boolean) {
+  return {
+    display: "block",
+    width: "100%",
+    marginTop: 12,
+    padding: "12px 14px",
+    background: "#fff0ef",
+    color: "#a32121",
+    border: "1px solid #e5b4b4",
+    borderRadius: 8,
+    fontWeight: 600,
+    cursor: disabled ? "not-allowed" : "pointer",
+    opacity: disabled ? 0.6 : 1,
+  } as const;
 }
